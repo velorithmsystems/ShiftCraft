@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#100F0D" />
+<title>ShiftCraft — Workforce Time & Attendance | Velorithm Systems</title>
+<meta name="description" content="ShiftCraft is Velorithm Systems' workforce time and attendance platform — digital shift scheduling, supervisor-approved self clock-in, and payroll-grade audit trails." />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #0a0908;
+    --surface: #15130f;
+    --surface-2: #1c1a16;
+    --border: #2a2725;
+    --text: #f5efe6;
+    --muted: #a8a195;
+    --gold: #d4a857;
+    --gold-soft: #f0d999;
+    --teal: #14b8a6;
+    --teal-deep: #0f766e;
+    --amber: #f59e0b;
+    --indigo: #4338ca;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .font-display { font-family: 'Georgia', serif; letter-spacing: -0.01em; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .section { border-top: 1px solid var(--border); }
+  .gold { color: var(--gold); }
+  .surface { background: var(--surface); border: 1px solid var(--border); }
+  .surface-2 { background: var(--surface-2); border: 1px solid var(--border); }
+  .btn-primary { background: var(--gold); color: #1a1408; }
+  .btn-primary:hover { background: var(--gold-soft); }
+  .btn-ghost { border: 1px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { background: var(--surface); }
+  .product-num { font-family: 'Georgia', serif; color: var(--muted); }
+  .accent-line::before { content: ''; display: inline-block; width: 28px; height: 1px; background: var(--gold); margin-right: 12px; vertical-align: middle; }
+  .grid-bg {
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(212, 168, 87, 0.08), transparent 45%),
+      radial-gradient(circle at 80% 60%, rgba(20, 184, 166, 0.06), transparent 45%);
+  }
+  /* Mini mock-UI styling */
+  .mock {
+    background: #fafaf9; color: #0f172a; border-radius: 14px; padding: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+  }
+  .mock-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; }
+  .day-chip { background: #fef3c7; color: #78350f; }
+  .night-chip { background: #e0e7ff; color: #1e1b4b; }
+  .pending-chip { background: #fef9c3; color: #854d0e; }
+  .approved-chip { background: #dcfce7; color: #166534; }
+  .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; border-left: 3px solid var(--teal-deep); }
+  .stat-num { font-family: 'Georgia', serif; font-size: 22px; color: var(--teal-deep); font-weight: 700; }
+</style>
+</head>
+
+<body class="min-h-screen">
+
+<!-- ============ TOP NAV ============ -->
+<header class="border-b border-[--border]" style="border-color: var(--border);">
+  <div class="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
+    <a href="https://velorithmsystems.com" class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded grid place-items-center" style="background: var(--gold); color: #1a1408; font-weight: 700;">V</div>
+      <div class="leading-tight">
+        <div class="font-semibold text-sm">Velorithm<span class="gold">SYSTEMS</span> LTD</div>
+        <div class="text-[10px]" style="color: var(--muted);">Engineering Intelligence.</div>
+      </div>
+    </a>
+    <nav class="hidden md:flex items-center gap-6 text-sm" style="color: var(--muted);">
+      <a href="https://velorithmsystems.com#about" class="hover:text-white">About</a>
+      <a href="https://velorithmsystems.com#services" class="hover:text-white">Services</a>
+      <a href="https://velorithmsystems.com#products" class="hover:text-white">Products</a>
+      <a href="https://velorithmsystems.com#contact" class="hover:text-white">Contact</a>
+    </nav>
+    <a href="https://velorithmsystems.com#contact" class="btn-primary rounded px-3 py-1.5 text-xs font-semibold">Book a Consultation</a>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="grid-bg">
+  <div class="max-w-6xl mx-auto px-5 py-20 sm:py-28">
+    <div class="product-num text-sm mb-6">PRODUCT — P/03</div>
+    <div class="grid md:grid-cols-12 gap-10 items-end">
+      <div class="md:col-span-7">
+        <div class="eyebrow mb-4 accent-line">Workforce Time & Attendance</div>
+        <h1 class="font-display text-5xl sm:text-6xl font-bold leading-[1.05] mb-5">
+          ShiftCraft.<br/>
+          <span class="gold">Time you can prove.</span>
+        </h1>
+        <p class="text-lg max-w-xl mb-8" style="color: var(--muted);">
+          A workforce time & attendance platform engineered for institutions where payroll has to be exactly right —
+          digital shift scheduling, supervisor-approved self clock-in, and an audit trail behind every minute.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="./bea-fisher-attendance.html" class="btn-primary rounded px-5 py-3 text-sm font-semibold">Try the Live Demo →</a>
+          <a href="https://velorithmsystems.com#contact" class="btn-ghost rounded px-5 py-3 text-sm font-medium">Request a Walkthrough</a>
+        </div>
+      </div>
+      <div class="md:col-span-5">
+        <div class="surface rounded-xl p-5">
+          <div class="eyebrow mb-3">At a glance</div>
+          <ul class="space-y-3 text-sm">
+            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Two-role app</div><div style="color: var(--muted);">Supervisor management + caregiver self-service</div></div></li>
+            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">System-generated timestamps</div><div style="color: var(--muted);">Self clock-in/out — never typed</div></div></li>
+            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Full audit trail</div><div style="color: var(--muted);">Who changed what, when — on every entry</div></div></li>
+            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Built-in HR assistant</div><div style="color: var(--muted);">Leave balances, policy, first-aid guidance</div></div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section class="section">
+  <div class="max-w-6xl mx-auto px-5 py-20">
+    <div class="grid md:grid-cols-12 gap-12">
+      <div class="md:col-span-5">
+        <div class="eyebrow mb-3">01 — The Problem</div>
+        <h2 class="font-display text-3xl sm:text-4xl font-bold leading-tight">
+          Paper logs lead to <span class="gold">payroll errors</span>.
+        </h2>
+      </div>
+      <div class="md:col-span-7 text-base leading-relaxed" style="color: var(--muted);">
+        <p class="mb-4">
+          In care institutions, hospitals, and facilities running shift work, time is still tracked on paper sheets that get smudged,
+          lost, or misread. Supervisors then re-key those numbers into a system — every keystroke a chance to introduce an error.
+        </p>
+        <p>
+          The result: wrong hours, wrong paychecks, repeated corrections, and trust eroded between staff and management.
+          ShiftCraft removes the paper, captures every minute digitally, and surfaces anomalies before payroll runs.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="section">
+  <div class="max-w-6xl mx-auto px-5 py-20">
+    <div class="eyebrow mb-3">02 — Capabilities</div>
+    <h2 class="font-display text-3xl sm:text-4xl font-bold mb-12 max-w-2xl">A workforce platform, engineered end&#8209;to&#8209;end.</h2>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <!-- card -->
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">01</div>
+        <h3 class="font-semibold mb-2">Shift Scheduling</h3>
+        <p class="text-sm" style="color: var(--muted);">Build weekly schedules, assign caregivers to day or night shifts, reassign in a click. Coverage warnings catch understaffed days before they happen.</p>
+      </div>
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">02</div>
+        <h3 class="font-semibold mb-2">Self Clock-In / Out</h3>
+        <p class="text-sm" style="color: var(--muted);">Caregivers clock themselves in and out from their own profile. Timestamps come from the system clock — never typed — and entries stay pending until a supervisor approves.</p>
+      </div>
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">03</div>
+        <h3 class="font-semibold mb-2">Supervisor Review</h3>
+        <p class="text-sm" style="color: var(--muted);">One-tap approval for pending self-entries. Edits are tracked. Every correction records who changed what and when.</p>
+      </div>
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">04</div>
+        <h3 class="font-semibold mb-2">Smart Anomaly Flags</h3>
+        <p class="text-sm" style="color: var(--muted);">Late arrival, early departure, overtime, missing punches, shift gaps — surfaced automatically on the supervisor dashboard.</p>
+      </div>
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">05</div>
+        <h3 class="font-semibold mb-2">Payroll Reports</h3>
+        <p class="text-sm" style="color: var(--muted);">Auto-calculated bi-weekly totals per caregiver, day vs night hours, overtime, anomaly counts. Print or export to CSV in one click.</p>
+      </div>
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">06</div>
+        <h3 class="font-semibold mb-2">HR &amp; Care Assistant</h3>
+        <p class="text-sm" style="color: var(--muted);">In-app help that answers questions about leave balances, HR &amp; company rules, and first-aid guidance for assisting people with disabilities. Plus a knowledge search agent.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MOCK UI PREVIEW ============ -->
+<section class="section grid-bg">
+  <div class="max-w-6xl mx-auto px-5 py-20">
+    <div class="eyebrow mb-3">03 — Inside the platform</div>
+    <h2 class="font-display text-3xl sm:text-4xl font-bold mb-12 max-w-2xl">Designed for the floor, not the back office.</h2>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+
+      <!-- Dashboard mock -->
+      <div class="surface-2 rounded-2xl p-6">
+        <div class="text-xs font-semibold mb-3" style="color: var(--muted);">SUPERVISOR DASHBOARD</div>
+        <div class="mock">
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <div class="stat-card"><div class="text-[10px] uppercase tracking-wider text-gray-500">Scheduled</div><div class="stat-num">8</div></div>
+            <div class="stat-card" style="border-left-color:#16A34A;"><div class="text-[10px] uppercase tracking-wider text-gray-500">Clocked in</div><div class="stat-num" style="color:#16A34A;">6</div></div>
+            <div class="stat-card" style="border-left-color:#F59E0B;"><div class="text-[10px] uppercase tracking-wider text-gray-500">Pending</div><div class="stat-num" style="color:#92400E;">2</div></div>
+            <div class="stat-card" style="border-left-color:#DC2626;"><div class="text-[10px] uppercase tracking-wider text-gray-500">Flags wk</div><div class="stat-num" style="color:#DC2626;">3</div></div>
+          </div>
+          <div class="text-[11px] text-gray-600 mb-2 font-medium">Today's attendance</div>
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center text-[11px]"><span>Jane Doe <span class="day-chip mock-chip">Day</span></span><span class="text-green-700 font-mono">In 07:05</span></div>
+            <div class="flex justify-between items-center text-[11px]"><span>Mark Thompson <span class="day-chip mock-chip">Day</span></span><span class="text-green-700 font-mono">In 07:35</span></div>
+            <div class="flex justify-between items-center text-[11px]"><span>Aisha Patel <span class="night-chip mock-chip">Night</span></span><span class="pending-chip mock-chip">Pending</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule mock -->
+      <div class="surface-2 rounded-2xl p-6">
+        <div class="text-xs font-semibold mb-3" style="color: var(--muted);">WEEKLY SCHEDULE</div>
+        <div class="mock">
+          <div class="grid grid-cols-7 gap-1 text-[10px] mb-2 font-medium text-gray-500">
+            <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+          </div>
+          <div class="space-y-1">
+            <div class="grid grid-cols-7 gap-1 text-[9px]">
+              <div class="day-chip mock-chip text-center">D</div><div class="day-chip mock-chip text-center">D</div><div class="bg-gray-100 mock-chip text-center text-gray-400">·</div><div class="night-chip mock-chip text-center">N</div><div class="night-chip mock-chip text-center">N</div><div class="day-chip mock-chip text-center">D</div><div class="bg-gray-100 mock-chip text-center text-gray-400">·</div>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-[9px]">
+              <div class="day-chip mock-chip text-center">D</div><div class="night-chip mock-chip text-center">N</div><div class="day-chip mock-chip text-center">D</div><div class="bg-gray-100 mock-chip text-center text-gray-400">·</div><div class="day-chip mock-chip text-center">D</div><div class="night-chip mock-chip text-center">N</div><div class="day-chip mock-chip text-center">D</div>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-[9px]">
+              <div class="night-chip mock-chip text-center">N</div><div class="night-chip mock-chip text-center">N</div><div class="day-chip mock-chip text-center">D</div><div class="day-chip mock-chip text-center">D</div><div class="bg-gray-100 mock-chip text-center text-gray-400">·</div><div class="night-chip mock-chip text-center">N</div><div class="night-chip mock-chip text-center">N</div>
+            </div>
+          </div>
+          <div class="mt-3 pt-2 border-t flex items-center gap-3 text-[10px] text-gray-500">
+            <span><span class="day-chip mock-chip">Day</span> 7AM–7PM</span>
+            <span><span class="night-chip mock-chip">Night</span> 7PM–7AM</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Self clock-in mock -->
+      <div class="surface-2 rounded-2xl p-6">
+        <div class="text-xs font-semibold mb-3" style="color: var(--muted);">CAREGIVER CLOCK-IN</div>
+        <div class="mock">
+          <div class="rounded-lg p-3 mb-3" style="background: linear-gradient(to right, #0F766E, #14B8A6); color: white;">
+            <div class="text-[10px] opacity-90">Welcome back,</div>
+            <div class="text-base font-bold">Jane Doe</div>
+            <div class="text-[10px] mt-1.5">Today: <span class="day-chip mock-chip" style="background:#fcd34d;">Day</span></div>
+          </div>
+          <div class="text-[11px] font-semibold mb-1">Time clock</div>
+          <div class="text-[11px] text-gray-600 mb-3">Clocked in at <span class="font-mono font-medium text-teal-700">07:05</span> · <span class="pending-chip mock-chip">Pending approval</span></div>
+          <button class="w-full bg-indigo-700 text-white text-[11px] font-medium rounded-md py-2">Clock Out</button>
+          <div class="text-[9px] text-gray-500 mt-2 border-t pt-1.5">Timestamp from device clock — can't be edited by hand.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VIDEO SLOT ============ -->
+<section class="section">
+  <div class="max-w-6xl mx-auto px-5 py-20">
+    <div class="eyebrow mb-3">04 — See it run</div>
+    <h2 class="font-display text-3xl sm:text-4xl font-bold mb-10 max-w-2xl">A 90-second walkthrough.</h2>
+
+    <!-- ====== REPLACE THIS BLOCK WITH YOUR VIDEO EMBED ====== -->
+    <!--
+      For Loom:    <div style="position:relative;padding-bottom:56.25%;"><iframe src="https://www.loom.com/embed/YOUR_ID" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></div>
+      For YouTube: <div style="position:relative;padding-bottom:56.25%;"><iframe src="https://www.youtube.com/embed/YOUR_ID" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></div>
+      For MP4:     <video controls style="width:100%;border-radius:12px;"><source src="./shiftcraft-demo.mp4" type="video/mp4"></video>
+    -->
+    <div class="surface rounded-2xl overflow-hidden">
+      <div class="aspect-video grid place-items-center text-center px-6" style="background: linear-gradient(135deg, #15130f, #1c1a16);">
+        <div>
+          <div class="inline-flex w-16 h-16 rounded-full items-center justify-center mb-4" style="background: var(--gold); color: #1a1408;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+          <div class="font-display text-2xl font-bold mb-2">Video coming soon</div>
+          <p class="text-sm max-w-md mx-auto" style="color: var(--muted);">
+            Drop your Loom, YouTube, or MP4 embed into this section. See the
+            <span class="gold">shiftcraft-demo-script.md</span> file for a ready-made 90-second walkthrough script.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CASE STUDY ============ -->
+<section class="section">
+  <div class="max-w-6xl mx-auto px-5 py-20">
+    <div class="grid md:grid-cols-12 gap-12 items-start">
+      <div class="md:col-span-5">
+        <div class="eyebrow mb-3">05 — Case Study</div>
+        <h2 class="font-display text-3xl sm:text-4xl font-bold leading-tight mb-5">
+          Bea Fisher <span class="gold">Caregiving</span>.
+        </h2>
+        <p class="text-base mb-4" style="color: var(--muted);">
+          ShiftCraft launched at Bea Fisher, a caregiving institution running 24/7 day and night shifts.
+          Before ShiftCraft, caregivers logged time on paper and supervisors transcribed it into a payroll
+          system — a process responsible for repeated salary errors.
+        </p>
+        <p class="text-base" style="color: var(--muted);">
+          With ShiftCraft, every entry is captured digitally, every correction is logged, and supervisors approve
+          self-reported clock-ins before payroll runs. The audit trail closes the loop on accountability for both sides.
+        </p>
+      </div>
+      <div class="md:col-span-7">
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div class="surface rounded-xl p-5">
+            <div class="font-display text-3xl gold font-bold">0</div>
+            <div class="text-xs font-semibold mt-2">Paper sheets</div>
+            <div class="text-xs mt-1" style="color: var(--muted);">Every entry captured digitally</div>
+          </div>
+          <div class="surface rounded-xl p-5">
+            <div class="font-display text-3xl gold font-bold">2</div>
+            <div class="text-xs font-semibold mt-2">Role-based views</div>
+            <div class="text-xs mt-1" style="color: var(--muted);">Supervisor &amp; caregiver</div>
+          </div>
+          <div class="surface rounded-xl p-5">
+            <div class="font-display text-3xl gold font-bold">100%</div>
+            <div class="text-xs font-semibold mt-2">Auditable</div>
+            <div class="text-xs mt-1" style="color: var(--muted);">Every edit time-stamped</div>
+          </div>
+        </div>
+        <div class="surface-2 rounded-xl p-5 mt-3">
+          <div class="eyebrow mb-2">Built for healthcare-grade trust</div>
+          <ul class="text-sm space-y-2" style="color: var(--muted);">
+            <li>• Day shift (7AM–7PM) and night shift (7PM–7AM) with color-coded scheduling</li>
+            <li>• System-generated timestamps for self clock-in — no manual entry possible</li>
+            <li>• Pending-approval workflow with full audit log per entry</li>
+            <li>• In-app HR assistant including first-aid guidance for assisting people with disabilities</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="section">
+  <div class="max-w-6xl mx-auto px-5 py-20 text-center">
+    <div class="eyebrow mb-4">Get hands-on</div>
+    <h2 class="font-display text-4xl sm:text-5xl font-bold mb-6 leading-tight">
+      Open the live demo or <span class="gold">talk to us</span>.
+    </h2>
+    <p class="text-base max-w-xl mx-auto mb-8" style="color: var(--muted);">
+      The demo runs entirely in your browser with seeded sample data. Want to deploy it for your own institution?
+      We adapt the data model, branding, and integrations to your environment.
+    </p>
+    <div class="flex flex-wrap gap-3 justify-center">
+      <a href="./bea-fisher-attendance.html" class="btn-primary rounded px-6 py-3 text-sm font-semibold">Open Live Demo →</a>
+      <a href="https://velorithmsystems.com#contact" class="btn-ghost rounded px-6 py-3 text-sm font-medium">Request a Walkthrough</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="section">
+  <div class="max-w-6xl mx-auto px-5 py-12">
+    <div class="grid md:grid-cols-4 gap-8">
+      <div class="md:col-span-2">
+        <a href="https://velorithmsystems.com" class="flex items-center gap-2.5 mb-3">
+          <div class="w-8 h-8 rounded grid place-items-center" style="background: var(--gold); color: #1a1408; font-weight: 700;">V</div>
+          <div class="font-semibold text-sm">Velorithm<span class="gold">SYSTEMS</span> LTD</div>
+        </a>
+        <p class="text-sm max-w-md" style="color: var(--muted);">
+          Global IT consulting and AI-native solutions, delivered at velocity. From strategy to system, engineered with rigor.
+        </p>
+      </div>
+      <div>
+        <div class="text-xs font-semibold uppercase tracking-wider mb-3">Products</div>
+        <ul class="space-y-2 text-sm" style="color: var(--muted);">
+          <li><a href="https://velorithmsystems.com#products" class="hover:text-white">AI Agent Platform</a></li>
+          <li><a href="https://velorithmsystems.com#products" class="hover:text-white">ClipCraft</a></li>
+          <li><a href="./shiftcraft.html" class="hover:text-white gold">ShiftCraft</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="text-xs font-semibold uppercase tracking-wider mb-3">Company</div>
+        <ul class="space-y-2 text-sm" style="color: var(--muted);">
+          <li><a href="https://velorithmsystems.com#about" class="hover:text-white">About</a></li>
+          <li><a href="https://velorithmsystems.com#why" class="hover:text-white">Why Velorithm</a></li>
+          <li><a href="https://velorithmsystems.com#contact" class="hover:text-white">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="mt-10 pt-6 border-t text-xs flex flex-wrap justify-between gap-2" style="border-color: var(--border); color: var(--muted);">
+      <div>© Velorithm Systems Ltd. All rights reserved.</div>
+      <div>ShiftCraft is a product of Velorithm Systems.</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

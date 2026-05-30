@@ -1,0 +1,2132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShiftCraft · Bea Fisher Demo · Velorithm Systems</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bf-primary: #0f766e;     /* teal-700 */
+    --bf-primary-dark: #115e59;
+    --bf-day: #f59e0b;         /* amber-500 */
+    --bf-day-soft: #fef3c7;
+    --bf-night: #4338ca;       /* indigo-700 */
+    --bf-night-soft: #e0e7ff;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f8fafc; }
+  .shift-day { background: var(--bf-day-soft); border-left: 4px solid var(--bf-day); color: #78350f; }
+  .shift-night { background: var(--bf-night-soft); border-left: 4px solid var(--bf-night); color: #1e1b4b; }
+  .btn-primary { background: var(--bf-primary); color: white; }
+  .btn-primary:hover { background: var(--bf-primary-dark); }
+  .tab-active { color: var(--bf-primary); border-bottom-color: var(--bf-primary); }
+  /* Print styles for payroll report */
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* =========================
+   STORAGE & SEED DATA
+========================= */
+const STORAGE_KEY = 'bea_fisher_attendance_v3';
+
+const seedData = () => {
+  const today = new Date();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const fmt = (d) => d.toISOString().slice(0, 10);
+
+  const users = [
+    { id: 'u1', username: 'admin', password: 'admin', name: 'Marisol Reyes', role: 'supervisor' },
+    { id: 'u2', username: 'jane', password: 'jane', name: 'Jane Doe', role: 'caregiver' },
+    { id: 'u3', username: 'mark', password: 'mark', name: 'Mark Thompson', role: 'caregiver' },
+    { id: 'u4', username: 'aisha', password: 'aisha', name: 'Aisha Patel', role: 'caregiver' },
+    { id: 'u5', username: 'liam', password: 'liam', name: 'Liam O\'Brien', role: 'caregiver' },
+    { id: 'u6', username: 'sofia', password: 'sofia', name: 'Sofia Martinez', role: 'caregiver' },
+  ];
+
+  // Build a week's schedule
+  const shifts = [];
+  const caregivers = users.filter(u => u.role === 'caregiver');
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const date = fmt(d);
+    // Two day-shift and two night-shift assignments most days
+    shifts.push({ id: `s${i}a`, caregiverId: caregivers[0].id, date, shiftType: 'day' });
+    shifts.push({ id: `s${i}b`, caregiverId: caregivers[1].id, date, shiftType: 'day' });
+    shifts.push({ id: `s${i}c`, caregiverId: caregivers[2].id, date, shiftType: 'night' });
+    shifts.push({ id: `s${i}d`, caregiverId: caregivers[3].id, date, shiftType: 'night' });
+    if (i % 2 === 0) {
+      shifts.push({ id: `s${i}e`, caregiverId: caregivers[4].id, date, shiftType: 'day' });
+    }
+  }
+
+  // A couple of historical time entries
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const timeEntries = [
+    {
+      id: 't1', caregiverId: caregivers[0].id, date: fmt(yesterday),
+      timeIn: '07:05', timeOut: '19:02', shiftType: 'day',
+      source: 'supervisor', status: 'approved',
+      notes: 'On time', auditLog: [{ ts: new Date().toISOString(), by: 'admin', action: 'Created entry' }],
+    },
+    {
+      id: 't2', caregiverId: caregivers[1].id, date: fmt(yesterday),
+      timeIn: '07:35', timeOut: '19:10', shiftType: 'day',
+      source: 'self', status: 'pending',
+      notes: 'Self clock-in', auditLog: [{ ts: new Date().toISOString(), by: 'mark', action: 'Self clock-in 07:35' }, { ts: new Date().toISOString(), by: 'mark', action: 'Self clock-out 19:10' }],
+    },
+  ];
+
+  // --- Leave balances (entitlement / used / remaining) ---
+  const mkLeave = (a, s, p) => ({
+    annual:   { entitled: 15, used: a, remaining: 15 - a },
+    sick:     { entitled: 10, used: s, remaining: 10 - s },
+    personal: { entitled: 5,  used: p, remaining: 5 - p },
+  });
+  const leaveBalances = {
+    [caregivers[0].id]: mkLeave(6, 3, 2),
+    [caregivers[1].id]: mkLeave(4, 1, 0),
+    [caregivers[2].id]: mkLeave(10, 5, 4),
+    [caregivers[3].id]: mkLeave(2, 0, 1),
+    [caregivers[4].id]: mkLeave(8, 6, 3),
+  };
+
+  // --- Staff directory (for the Search agent) ---
+  const directory = {
+    [caregivers[0].id]: { phone: '555-0142', email: 'jane.doe@beafisher.org',   certs: ['CPR', 'First Aid', 'Dementia Care'],     team: 'Wing A' },
+    [caregivers[1].id]: { phone: '555-0188', email: 'mark.t@beafisher.org',      certs: ['CPR', 'Manual Handling'],                team: 'Wing A' },
+    [caregivers[2].id]: { phone: '555-0173', email: 'aisha.patel@beafisher.org', certs: ['CPR', 'First Aid', 'Medication Admin'],  team: 'Wing B' },
+    [caregivers[3].id]: { phone: '555-0159', email: 'liam.ob@beafisher.org',     certs: ['First Aid', 'Autism Support'],           team: 'Wing B' },
+    [caregivers[4].id]: { phone: '555-0121', email: 'sofia.m@beafisher.org',     certs: ['CPR', 'First Aid', 'Sign Language'],     team: 'Wing C' },
+  };
+
+  // --- Knowledge base: HR rules, company rules, disability first aid ---
+  const knowledgeBase = [
+    // HR
+    { id: 'kb-annual', category: 'HR', title: 'Annual leave', tags: ['leave','vacation','holiday','annual','pto','time off','days off'],
+      body: 'Full-time caregivers accrue 15 days of paid annual leave per calendar year. Requests must be submitted to your supervisor at least 14 days in advance. Up to 5 unused days carry over into the next year; anything beyond that is forfeited on December 31.' },
+    { id: 'kb-sick', category: 'HR', title: 'Sick leave', tags: ['sick','illness','ill','unwell','doctor','medical leave'],
+      body: 'Caregivers receive 10 paid sick days per year. Notify your supervisor before the start of your shift if you cannot attend. A medical certificate is required for any absence of 3 or more consecutive days.' },
+    { id: 'kb-personal', category: 'HR', title: 'Personal / emergency leave', tags: ['personal','emergency','family','bereavement','urgent'],
+      body: 'Five personal days are available each year for emergencies, family matters, or bereavement. Where possible, give 24 hours notice. Bereavement leave for an immediate family member may be extended at management discretion.' },
+    { id: 'kb-overtime', category: 'HR', title: 'Overtime & breaks', tags: ['overtime','break','rest','hours','pay','ot'],
+      body: 'Hours worked beyond 80 in a bi-weekly pay period are paid at 1.5x. Every shift of 6 hours or more includes a paid 30-minute meal break and two 15-minute rest breaks. Night-shift caregivers receive a 10% shift differential.' },
+    { id: 'kb-payroll', category: 'HR', title: 'Pay periods & corrections', tags: ['payroll','pay','salary','wage','correction','dispute'],
+      body: 'Pay is processed every two weeks. If your recorded hours look wrong, raise it with your supervisor before the period closes. Every correction is captured in the time-entry audit log, showing who changed what and when.' },
+    // Company
+    { id: 'kb-uniform', category: 'Company', title: 'Uniform & ID', tags: ['uniform','dress','badge','id','identification','scrubs'],
+      body: 'Caregivers wear the issued teal scrubs and must display their photo ID badge at all times while on the floor. Closed-toe, non-slip footwear is mandatory. Long hair must be tied back during resident care.' },
+    { id: 'kb-confidentiality', category: 'Company', title: 'Resident confidentiality', tags: ['confidential','privacy','data','records','hipaa','information'],
+      body: 'Resident information is strictly confidential. Do not discuss residents outside of care handovers, and never share details, photos, or records on personal devices or social media. Breaches are treated as gross misconduct.' },
+    { id: 'kb-conduct', category: 'Company', title: 'Code of conduct', tags: ['conduct','behaviour','behavior','respect','harassment','ethics'],
+      body: 'Treat residents, families, and colleagues with dignity and respect. Harassment, discrimination, and abuse of any kind are not tolerated. Report concerns to your supervisor or via the confidential safeguarding line.' },
+    { id: 'kb-handover', category: 'Company', title: 'Shift handover', tags: ['handover','shift','change','report','briefing'],
+      body: 'A verbal and written handover is required at every shift change. Cover each resident’s condition, medications given, incidents, and outstanding tasks. Day shift runs 7AM–7PM and night shift 7PM–7AM.' },
+    { id: 'kb-incident', category: 'Company', title: 'Incident reporting', tags: ['incident','accident','fall','report','injury','near miss'],
+      body: 'Any accident, fall, medication error, or near-miss must be logged in an incident report within the same shift and flagged to your supervisor immediately. Do not move a seriously injured person unless they are in further danger.' },
+    // First aid for people with disabilities
+    { id: 'kb-fa-general', category: 'FirstAid', title: 'General first-aid principles (disability care)', tags: ['first aid','emergency','help','disability','safety','basics'],
+      body: 'Stay calm and reassure the person. Always introduce yourself and explain what you are about to do before you touch or move them — many disabled people rely on knowing what to expect. Communicate in the person’s preferred way and check for a care plan or medical-alert information. Call emergency services for any serious or uncertain situation.' },
+    { id: 'kb-fa-seizure', category: 'FirstAid', title: 'Seizures', tags: ['seizure','epilepsy','fit','convulsion','shaking'],
+      body: 'Protect the person from injury: move hard objects away and cushion the head. Do NOT restrain them or put anything in their mouth. Time the seizure. Once it stops, gently place them in the recovery position. Call emergency services if the seizure lasts more than 5 minutes, repeats without recovery, or the person is injured or not their usual self afterward.' },
+    { id: 'kb-fa-choking', category: 'FirstAid', title: 'Choking (incl. swallowing difficulties)', tags: ['choking','choke','airway','dysphagia','swallow','food'],
+      body: 'If the person can cough, encourage them to keep coughing. If the airway is blocked, give up to 5 firm back blows between the shoulder blades, then up to 5 abdominal thrusts; alternate until clear. For a wheelchair user, deliver back blows leaning them forward and thrusts from behind the chair. People with dysphagia are higher risk — follow their eating/feeding plan. Call emergency services if the blockage does not clear.' },
+    { id: 'kb-fa-mobility', category: 'FirstAid', title: 'Falls & assisting mobility', tags: ['fall','falls','wheelchair','mobility','lifting','transfer'],
+      body: 'After a fall, do not rush to lift the person. Check for pain, head injury, or signs of fracture and ask before moving them. Use proper manual-handling technique and equipment — never lift beyond your training. For wheelchair transfers, lock the brakes and move slowly. If you suspect a serious injury, keep them still and call for help.' },
+    { id: 'kb-fa-sensory', category: 'FirstAid', title: 'Sensory overload & communication', tags: ['autism','sensory','overload','meltdown','communication','calm','distress'],
+      body: 'For a person experiencing sensory overload or distress (e.g. some autistic individuals), reduce noise and bright light, give them space, and keep your tone low and steady. Avoid sudden touch. Use short, clear sentences or their usual communication aid. Allow time to respond. Seek medical help if they are at risk of harm or do not settle.' },
+  ];
+
+  return { users, shifts, timeEntries, leaveBalances, directory, knowledgeBase };
+};
+
+const loadState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  const seeded = seedData();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+  return seeded;
+};
+
+const saveState = (state) => {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+};
+
+/* =========================
+   HELPERS
+========================= */
+const SHIFT_TIMES = {
+  day:   { start: '07:00', end: '19:00', label: 'Day Shift (7AM–7PM)' },
+  night: { start: '19:00', end: '07:00', label: 'Night Shift (7PM–7AM)' },
+};
+
+const fmtDateISO = (d) => d.toISOString().slice(0, 10);
+const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const weekday = (iso) => parseISO(iso).toLocaleDateString(undefined, { weekday: 'short' });
+const niceDate = (iso) => parseISO(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+const minsBetween = (timeIn, timeOut, shiftType) => {
+  if (!timeIn || !timeOut) return 0;
+  const [ih, im] = timeIn.split(':').map(Number);
+  const [oh, om] = timeOut.split(':').map(Number);
+  let start = ih * 60 + im;
+  let end = oh * 60 + om;
+  // Night shift wraps midnight; if end <= start assume next day
+  if (end <= start) end += 24 * 60;
+  return end - start;
+};
+
+const minsToHrs = (m) => (m / 60).toFixed(2);
+
+const getWeekStart = (d) => {
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7; // Monday = 0
+  date.setDate(date.getDate() - day);
+  date.setHours(0,0,0,0);
+  return date;
+};
+
+const weekDates = (start) => {
+  return Array.from({length: 7}, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return fmtDateISO(d);
+  });
+};
+
+const newId = () => Math.random().toString(36).slice(2, 10);
+
+/* Compute deviations from scheduled shift */
+const analyzeEntry = (entry) => {
+  const flags = [];
+  if (!entry.timeIn) flags.push({ level: 'error', text: 'Missing time-in' });
+  if (!entry.timeOut) flags.push({ level: 'error', text: 'Missing time-out' });
+  if (entry.timeIn && entry.timeOut) {
+    const mins = minsBetween(entry.timeIn, entry.timeOut, entry.shiftType);
+    if (mins <= 0) flags.push({ level: 'error', text: 'Time-out before time-in' });
+    if (mins > 12 * 60 + 30) flags.push({ level: 'warn', text: `Overtime (${minsToHrs(mins)}h)` });
+    if (mins < 11 * 60) flags.push({ level: 'warn', text: 'Short shift' });
+    const sched = SHIFT_TIMES[entry.shiftType];
+    if (sched) {
+      const [sh, sm] = sched.start.split(':').map(Number);
+      const [ih, im] = entry.timeIn.split(':').map(Number);
+      const lateMin = (ih * 60 + im) - (sh * 60 + sm);
+      if (lateMin > 10) flags.push({ level: 'warn', text: `Late arrival (+${lateMin}m)` });
+      if (lateMin < -10) flags.push({ level: 'info', text: `Early arrival (${lateMin}m)` });
+      const [eh, em] = sched.end.split(':').map(Number);
+      let outMin = (entry.timeOut.split(':').map(Number)[0]) * 60 + Number(entry.timeOut.split(':')[1]);
+      let endMin = eh * 60 + em;
+      if (entry.shiftType === 'night' && outMin <= endMin + 60) { /* same-day wrap fine */ }
+      // Early departure check (simple)
+    }
+  }
+  return flags;
+};
+
+/* =========================
+   UI PRIMITIVES
+========================= */
+const Badge = ({ tone='gray', children }) => {
+  const tones = {
+    gray: 'bg-gray-100 text-gray-700',
+    teal: 'bg-teal-100 text-teal-800',
+    amber: 'bg-amber-100 text-amber-900',
+    indigo: 'bg-indigo-100 text-indigo-900',
+    red: 'bg-red-100 text-red-800',
+    yellow: 'bg-yellow-100 text-yellow-900',
+    green: 'bg-green-100 text-green-800',
+  };
+  return <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${tones[tone]}`}>{children}</span>;
+};
+
+const ShiftBadge = ({ type }) => type === 'day'
+  ? <Badge tone="amber">Day 7AM–7PM</Badge>
+  : <Badge tone="indigo">Night 7PM–7AM</Badge>;
+
+const Card = ({ title, action, children, className='' }) => (
+  <div className={`bg-white rounded-xl shadow-sm border border-gray-200 ${className}`}>
+    {(title || action) && (
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        {title && <h3 className="font-semibold text-gray-800">{title}</h3>}
+        {action}
+      </div>
+    )}
+    <div className="p-5">{children}</div>
+  </div>
+);
+
+const Modal = ({ open, onClose, title, children, footer }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b flex items-center justify-between">
+          <h3 className="font-semibold">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <div className="p-5">{children}</div>
+        {footer && <div className="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex gap-2 justify-end">{footer}</div>}
+      </div>
+    </div>
+  );
+};
+
+/* =========================
+   LOGIN
+========================= */
+const Login = ({ onLogin, users }) => {
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin');
+  const [err, setErr] = useState('');
+
+  const submit = (e) => {
+    e.preventDefault();
+    const u = users.find(x => x.username === username.trim() && x.password === password);
+    if (!u) { setErr('Invalid credentials'); return; }
+    onLogin(u);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-teal-50 via-white to-amber-50">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-700 text-white text-2xl font-bold mb-3 shadow">SC</div>
+          <h1 className="text-2xl font-bold text-gray-800">ShiftCraft</h1>
+          <p className="text-gray-500 text-sm">Time &amp; Attendance · Bea Fisher demo workspace</p>
+          <p className="text-gray-400 text-[10px] mt-1">by Velorithm Systems</p>
+        </div>
+        <form onSubmit={submit} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
+          <div>
+            <label className="text-sm text-gray-600">Username</label>
+            <input value={username} onChange={e => setUsername(e.target.value)}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          {err && <div className="text-sm text-red-600">{err}</div>}
+          <button className="w-full btn-primary font-medium rounded-lg py-2.5">Sign in</button>
+          <div className="text-xs text-gray-500 leading-relaxed pt-2 border-t">
+            <p className="font-semibold text-gray-700 mb-1">Demo accounts</p>
+            <p>Supervisor: <span className="font-mono">admin / admin</span></p>
+            <p>Caregivers: <span className="font-mono">jane / jane</span>, <span className="font-mono">mark / mark</span>, <span className="font-mono">aisha / aisha</span>, <span className="font-mono">liam / liam</span>, <span className="font-mono">sofia / sofia</span></p>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/* =========================
+   SUPERVISOR — DASHBOARD
+========================= */
+const SupervisorDashboard = ({ state }) => {
+  const today = fmtDateISO(new Date());
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+  const todaysShifts = state.shifts.filter(s => s.date === today);
+  const entriesToday = state.timeEntries.filter(e => e.date === today);
+
+  const clockedIn = todaysShifts.filter(s => {
+    const e = entriesToday.find(x => x.caregiverId === s.caregiverId && x.shiftType === s.shiftType);
+    return e && e.timeIn;
+  });
+  const notClockedIn = todaysShifts.filter(s => !clockedIn.find(c => c.id === s.id));
+
+  // Weekly totals
+  const weekStart = getWeekStart(new Date());
+  const week = weekDates(weekStart);
+  const weeklyTotals = caregivers.map(c => {
+    const entries = state.timeEntries.filter(e => e.caregiverId === c.id && week.includes(e.date));
+    const mins = entries.reduce((s, e) => s + minsBetween(e.timeIn, e.timeOut, e.shiftType), 0);
+    return { caregiver: c, mins, entryCount: entries.length };
+  });
+
+  // Discrepancies
+  const discrepancies = [];
+  state.timeEntries.filter(e => week.includes(e.date)).forEach(e => {
+    const flags = analyzeEntry(e);
+    if (flags.length) {
+      const c = caregivers.find(u => u.id === e.caregiverId);
+      discrepancies.push({ entry: e, caregiver: c, flags });
+    }
+  });
+  // Missing entries (shift scheduled but no entry for completed past days)
+  state.shifts.filter(s => s.date < today).forEach(s => {
+    const e = state.timeEntries.find(x => x.caregiverId === s.caregiverId && x.date === s.date && x.shiftType === s.shiftType);
+    if (!e) {
+      const c = caregivers.find(u => u.id === s.caregiverId);
+      if (c) discrepancies.push({ entry: { date: s.date, shiftType: s.shiftType, _missing: true }, caregiver: c, flags: [{ level: 'error', text: 'No time entry recorded' }] });
+    }
+  });
+
+  // Pending self-clock approvals
+  const pending = state.timeEntries.filter(e => e.status === 'pending');
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="Scheduled Today" value={todaysShifts.length} tone="teal" />
+        <StatCard label="Clocked In" value={clockedIn.length} tone="green" />
+        <StatCard label="Pending Approval" value={pending.length} tone="amber" />
+        <StatCard label="Discrepancies (wk)" value={discrepancies.length} tone="red" />
+      </div>
+
+      {pending.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          <div className="text-amber-800 font-semibold">{pending.length} self-reported {pending.length === 1 ? 'entry' : 'entries'} awaiting review</div>
+          <div className="text-sm text-amber-700">Open <span className="font-medium">Time Entries</span> for the relevant date to verify and approve. Approving locks the entry into payroll totals; every action is recorded in the audit log.</div>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card title="Today's Attendance">
+          {todaysShifts.length === 0 && <p className="text-sm text-gray-500">No shifts scheduled today.</p>}
+          <ul className="divide-y divide-gray-100">
+            {todaysShifts.map(s => {
+              const c = caregivers.find(u => u.id === s.caregiverId);
+              const e = entriesToday.find(x => x.caregiverId === s.caregiverId && x.shiftType === s.shiftType);
+              return (
+                <li key={s.id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-gray-800">{c?.name}</div>
+                    <div className="text-xs mt-0.5"><ShiftBadge type={s.shiftType} /></div>
+                  </div>
+                  <div className="text-right">
+                    {e ? (
+                      <div className="text-sm">
+                        <span className="text-green-700 font-medium">In {e.timeIn}</span>
+                        {e.timeOut && <span className="text-gray-500"> → Out {e.timeOut}</span>}
+                      </div>
+                    ) : (
+                      <Badge tone="yellow">Pending</Badge>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+
+        <Card title="Weekly Hours by Caregiver">
+          <ul className="divide-y divide-gray-100">
+            {weeklyTotals.map(({ caregiver, mins, entryCount }) => {
+              const target = 40 * 60;
+              const pct = Math.min(100, (mins / target) * 100);
+              return (
+                <li key={caregiver.id} className="py-3">
+                  <div className="flex justify-between mb-1">
+                    <span className="font-medium text-gray-800">{caregiver.name}</span>
+                    <span className="text-sm text-gray-600">{minsToHrs(mins)}h · {entryCount} shifts</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-teal-600 rounded-full" style={{width:`${pct}%`}} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      </div>
+
+      <Card title="Flagged Entries This Week">
+        {discrepancies.length === 0 ? (
+          <p className="text-sm text-gray-500">No issues detected. Great work.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {discrepancies.map((d, i) => (
+              <li key={i} className="py-2 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                  <span className="font-medium text-gray-800">{d.caregiver?.name}</span>
+                  <span className="text-gray-500 text-sm"> · {niceDate(d.entry.date)} · </span>
+                  <ShiftBadge type={d.entry.shiftType} />
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {d.flags.map((f, j) => (
+                    <Badge key={j} tone={f.level === 'error' ? 'red' : f.level === 'warn' ? 'yellow' : 'gray'}>{f.text}</Badge>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+const StatCard = ({ label, value, tone='teal' }) => {
+  const tones = {
+    teal: 'from-teal-50 to-white text-teal-800',
+    green: 'from-green-50 to-white text-green-800',
+    amber: 'from-amber-50 to-white text-amber-900',
+    red: 'from-red-50 to-white text-red-800',
+  };
+  return (
+    <div className={`rounded-xl border border-gray-200 bg-gradient-to-br ${tones[tone]} p-4`}>
+      <div className="text-xs text-gray-500 uppercase tracking-wider">{label}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
+    </div>
+  );
+};
+
+/* =========================
+   SUPERVISOR — TIME ENTRIES
+========================= */
+const TimeEntries = ({ state, setState, currentUser }) => {
+  const [date, setDate] = useState(fmtDateISO(new Date()));
+  const [editing, setEditing] = useState(null); // entry being edited or new
+  const [showAudit, setShowAudit] = useState(null);
+
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+  const dayShifts = state.shifts.filter(s => s.date === date);
+  const dayEntries = state.timeEntries.filter(e => e.date === date);
+
+  // Rows: union of shifts + standalone entries (entries without shift)
+  const rows = useMemo(() => {
+    const map = new Map();
+    dayShifts.forEach(s => {
+      const key = `${s.caregiverId}|${s.shiftType}`;
+      map.set(key, { caregiverId: s.caregiverId, shiftType: s.shiftType, scheduled: true, entry: null });
+    });
+    dayEntries.forEach(e => {
+      const key = `${e.caregiverId}|${e.shiftType}`;
+      const existing = map.get(key) || { caregiverId: e.caregiverId, shiftType: e.shiftType, scheduled: false };
+      existing.entry = e;
+      map.set(key, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      const an = caregivers.find(c => c.id === a.caregiverId)?.name || '';
+      const bn = caregivers.find(c => c.id === b.caregiverId)?.name || '';
+      return an.localeCompare(bn);
+    });
+  }, [date, state]);
+
+  const openNew = () => setEditing({
+    id: null, caregiverId: caregivers[0]?.id, date, shiftType: 'day',
+    timeIn: '07:00', timeOut: '', notes: '', source: 'supervisor', status: 'approved',
+  });
+
+  const openEdit = (entry) => setEditing({ ...entry });
+
+  const openFromRow = (row) => {
+    if (row.entry) openEdit(row.entry);
+    else setEditing({
+      id: null, caregiverId: row.caregiverId, date, shiftType: row.shiftType,
+      timeIn: SHIFT_TIMES[row.shiftType].start, timeOut: '', notes: '', source: 'supervisor', status: 'approved',
+    });
+  };
+
+  const approveEntry = (entry) => {
+    const ts = new Date().toISOString();
+    setState(prev => ({
+      ...prev,
+      timeEntries: prev.timeEntries.map(e => e.id === entry.id
+        ? { ...e, status: 'approved', auditLog: [...(e.auditLog||[]), { ts, by: currentUser.username, action: 'Approved entry' }] }
+        : e),
+    }));
+  };
+
+  const validate = (e) => {
+    if (!e.caregiverId) return 'Select a caregiver';
+    if (!e.date) return 'Date required';
+    if (!e.timeIn) return 'Time in required';
+    if (e.timeIn && e.timeOut) {
+      if (minsBetween(e.timeIn, e.timeOut, e.shiftType) <= 0) return 'Time out must be after time in';
+    }
+    // Prevent duplicate
+    const dup = state.timeEntries.find(x => x.id !== e.id && x.caregiverId === e.caregiverId && x.date === e.date && x.shiftType === e.shiftType);
+    if (dup) return 'A time entry for this caregiver, date, and shift already exists';
+    return null;
+  };
+
+  const saveEntry = () => {
+    const err = validate(editing);
+    if (err) { alert(err); return; }
+    const ts = new Date().toISOString();
+    setState(prev => {
+      let timeEntries = prev.timeEntries.slice();
+      if (editing.id) {
+        const idx = timeEntries.findIndex(x => x.id === editing.id);
+        const before = timeEntries[idx];
+        const audit = [...(before.auditLog || [])];
+        const changes = [];
+        ['timeIn','timeOut','notes','shiftType'].forEach(k => {
+          if (before[k] !== editing[k]) changes.push(`${k}: "${before[k] || '∅'}" → "${editing[k] || '∅'}"`);
+        });
+        if (changes.length) audit.push({ ts, by: currentUser.username, action: 'Edited: ' + changes.join('; ') });
+        timeEntries[idx] = { ...editing, auditLog: audit };
+      } else {
+        timeEntries.push({
+          ...editing,
+          id: newId(),
+          auditLog: [{ ts, by: currentUser.username, action: 'Created entry' }],
+        });
+      }
+      return { ...prev, timeEntries };
+    });
+    setEditing(null);
+  };
+
+  const deleteEntry = (id) => {
+    if (!confirm('Delete this time entry?')) return;
+    setState(prev => ({ ...prev, timeEntries: prev.timeEntries.filter(e => e.id !== id) }));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Date</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+          <button onClick={() => setDate(fmtDateISO(new Date()))}
+            className="text-sm text-teal-700 hover:underline">Today</button>
+        </div>
+        <button onClick={openNew} className="btn-primary rounded-lg px-3 py-1.5 text-sm font-medium">+ New Entry</button>
+      </div>
+
+      <Card title={`Entries — ${niceDate(date)}`}>
+        {rows.length === 0 ? (
+          <p className="text-sm text-gray-500">No shifts scheduled and no entries logged for this day.</p>
+        ) : (
+          <div className="overflow-x-auto -mx-5">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-2">Caregiver</th>
+                  <th className="text-left px-4 py-2">Shift</th>
+                  <th className="text-left px-4 py-2">Time In</th>
+                  <th className="text-left px-4 py-2">Time Out</th>
+                  <th className="text-left px-4 py-2">Hours</th>
+                  <th className="text-left px-4 py-2">Source / Status</th>
+                  <th className="text-left px-4 py-2">Flags</th>
+                  <th className="text-right px-4 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => {
+                  const c = caregivers.find(u => u.id === row.caregiverId);
+                  const e = row.entry;
+                  const mins = e ? minsBetween(e.timeIn, e.timeOut, e.shiftType) : 0;
+                  const flags = e ? analyzeEntry(e) : (row.scheduled ? [{ level: 'warn', text: 'Not logged' }] : []);
+                  return (
+                    <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-2 font-medium">{c?.name}</td>
+                      <td className="px-4 py-2"><ShiftBadge type={row.shiftType} /></td>
+                      <td className="px-4 py-2 font-mono">{e?.timeIn || '—'}</td>
+                      <td className="px-4 py-2 font-mono">{e?.timeOut || '—'}</td>
+                      <td className="px-4 py-2">{e ? minsToHrs(mins) : '—'}</td>
+                      <td className="px-4 py-2">
+                        {e ? (
+                          <div className="flex flex-wrap gap-1">
+                            <Badge tone={e.source === 'self' ? 'amber' : 'teal'}>{e.source === 'self' ? 'Self-reported' : 'Supervisor'}</Badge>
+                            <Badge tone={e.status === 'approved' ? 'green' : 'yellow'}>{e.status === 'approved' ? 'Approved' : 'Pending'}</Badge>
+                          </div>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {flags.map((f, j) => (
+                            <Badge key={j} tone={f.level === 'error' ? 'red' : f.level === 'warn' ? 'yellow' : 'gray'}>{f.text}</Badge>
+                          ))}
+                          {!row.scheduled && e && <Badge tone="gray">Unscheduled</Badge>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap">
+                        {e && e.status === 'pending' && (
+                          <button onClick={() => approveEntry(e)} className="text-green-700 font-medium hover:underline mr-3">Approve</button>
+                        )}
+                        <button onClick={() => openFromRow(row)} className="text-teal-700 hover:underline mr-3">
+                          {e ? 'Edit' : 'Log'}
+                        </button>
+                        {e && <>
+                          <button onClick={() => setShowAudit(e)} className="text-gray-600 hover:underline mr-3">Audit</button>
+                          <button onClick={() => deleteEntry(e.id)} className="text-red-600 hover:underline">Delete</button>
+                        </>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Edit modal */}
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit Time Entry' : 'New Time Entry'}
+        footer={<>
+          <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-sm rounded-lg border">Cancel</button>
+          <button onClick={saveEntry} className="px-3 py-1.5 text-sm rounded-lg btn-primary">Save</button>
+        </>}>
+        {editing && (
+          <div className="space-y-3">
+            <Field label="Caregiver">
+              <select value={editing.caregiverId} onChange={e => setEditing({...editing, caregiverId: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                {caregivers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Date">
+                <input type="date" value={editing.date} onChange={e => setEditing({...editing, date: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Shift">
+                <select value={editing.shiftType} onChange={e => setEditing({...editing, shiftType: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                  <option value="day">Day (7AM–7PM)</option>
+                  <option value="night">Night (7PM–7AM)</option>
+                </select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Time In">
+                <input type="time" value={editing.timeIn} onChange={e => setEditing({...editing, timeIn: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono" />
+              </Field>
+              <Field label="Time Out">
+                <input type="time" value={editing.timeOut} onChange={e => setEditing({...editing, timeOut: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono" />
+              </Field>
+            </div>
+            <Field label="Notes">
+              <textarea value={editing.notes} onChange={e => setEditing({...editing, notes: e.target.value})}
+                rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+            </Field>
+            {editing.timeIn && editing.timeOut && (
+              <p className="text-sm text-gray-600">
+                Hours: <span className="font-semibold">{minsToHrs(minsBetween(editing.timeIn, editing.timeOut, editing.shiftType))}</span>
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Audit modal */}
+      <Modal open={!!showAudit} onClose={() => setShowAudit(null)} title="Change Log"
+        footer={<button onClick={() => setShowAudit(null)} className="px-3 py-1.5 text-sm rounded-lg border">Close</button>}>
+        {showAudit && (
+          <ul className="space-y-2 text-sm">
+            {(showAudit.auditLog || []).map((a, i) => (
+              <li key={i} className="border-l-2 border-teal-500 pl-3">
+                <div className="text-gray-500 text-xs">{new Date(a.ts).toLocaleString()} · <span className="font-medium">{a.by}</span></div>
+                <div>{a.action}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+    </div>
+  );
+};
+
+const Field = ({ label, children }) => (
+  <label className="block">
+    <span className="text-sm text-gray-600">{label}</span>
+    <div className="mt-1">{children}</div>
+  </label>
+);
+
+/* =========================
+   SUPERVISOR — SCHEDULE
+========================= */
+const Schedule = ({ state, setState }) => {
+  const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
+  const week = weekDates(weekStart);
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+  const [editing, setEditing] = useState(null);
+
+  const shiftsByCell = useMemo(() => {
+    const m = {};
+    state.shifts.forEach(s => {
+      if (!week.includes(s.date)) return;
+      const key = `${s.caregiverId}|${s.date}`;
+      (m[key] = m[key] || []).push(s);
+    });
+    return m;
+  }, [state.shifts, weekStart]);
+
+  const shiftWeek = (dir) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + dir * 7);
+    setWeekStart(getWeekStart(d));
+  };
+
+  const cycleShift = (caregiverId, date, existing) => {
+    setState(prev => {
+      const shifts = prev.shifts.slice();
+      // Cycle: empty -> day -> night -> empty
+      if (!existing) {
+        shifts.push({ id: newId(), caregiverId, date, shiftType: 'day' });
+      } else if (existing.shiftType === 'day') {
+        const idx = shifts.findIndex(s => s.id === existing.id);
+        shifts[idx] = { ...existing, shiftType: 'night' };
+      } else {
+        const idx = shifts.findIndex(s => s.id === existing.id);
+        shifts.splice(idx, 1);
+      }
+      return { ...prev, shifts };
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => shiftWeek(-1)} className="px-3 py-1.5 border rounded-lg text-sm">← Prev</button>
+          <div className="text-sm font-medium text-gray-700">
+            Week of {weekStart.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+          </div>
+          <button onClick={() => shiftWeek(1)} className="px-3 py-1.5 border rounded-lg text-sm">Next →</button>
+          <button onClick={() => setWeekStart(getWeekStart(new Date()))} className="text-sm text-teal-700 hover:underline">Today</button>
+        </div>
+        <div className="text-xs text-gray-500">Tip: click a cell to cycle <Badge tone="amber">Day</Badge> → <Badge tone="indigo">Night</Badge> → empty</div>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto -mx-5">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-700">
+              <tr>
+                <th className="text-left px-3 py-2 sticky left-0 bg-gray-50">Caregiver</th>
+                {week.map(d => (
+                  <th key={d} className="text-center px-2 py-2 min-w-[110px]">
+                    <div className="font-semibold">{weekday(d)}</div>
+                    <div className="text-xs text-gray-500 font-normal">{niceDate(d).split(',').slice(1).join(',').trim()}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {caregivers.map(c => {
+                const totalShifts = week.reduce((acc, d) => acc + ((shiftsByCell[`${c.id}|${d}`] || []).length), 0);
+                return (
+                  <tr key={c.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 sticky left-0 bg-white">
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs text-gray-500">{totalShifts} shifts</div>
+                    </td>
+                    {week.map(d => {
+                      const list = shiftsByCell[`${c.id}|${d}`] || [];
+                      const existing = list[0];
+                      const isWeekend = ['Sat','Sun'].includes(weekday(d));
+                      return (
+                        <td key={d} className={`px-1 py-1 text-center align-top ${isWeekend ? 'bg-gray-50/60' : ''}`}>
+                          <button
+                            onClick={() => cycleShift(c.id, d, existing)}
+                            className={`w-full rounded-md px-2 py-2 text-xs font-medium transition ${
+                              existing
+                                ? (existing.shiftType === 'day' ? 'shift-day' : 'shift-night')
+                                : 'bg-gray-50 hover:bg-gray-100 text-gray-400 border border-dashed border-gray-300'
+                            }`}>
+                            {existing ? (existing.shiftType === 'day' ? '☀ Day' : '☾ Night') : '+'}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Card title="Day Shift Coverage" className="bg-amber-50/40">
+          <ul className="text-sm space-y-1">
+            {week.map(d => {
+              const count = state.shifts.filter(s => s.date === d && s.shiftType === 'day').length;
+              return (
+                <li key={d} className="flex justify-between">
+                  <span className="text-gray-700">{niceDate(d)}</span>
+                  <span className={`font-semibold ${count < 2 ? 'text-red-600' : 'text-amber-800'}`}>{count} assigned</span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+        <Card title="Night Shift Coverage" className="bg-indigo-50/40">
+          <ul className="text-sm space-y-1">
+            {week.map(d => {
+              const count = state.shifts.filter(s => s.date === d && s.shiftType === 'night').length;
+              return (
+                <li key={d} className="flex justify-between">
+                  <span className="text-gray-700">{niceDate(d)}</span>
+                  <span className={`font-semibold ${count < 2 ? 'text-red-600' : 'text-indigo-800'}`}>{count} assigned</span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+/* =========================
+   SUPERVISOR — CAREGIVERS
+========================= */
+const Caregivers = ({ state, setState }) => {
+  const [editing, setEditing] = useState(null);
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+
+  const save = () => {
+    if (!editing.name || !editing.username) { alert('Name and username required'); return; }
+    setState(prev => {
+      const users = prev.users.slice();
+      if (editing.id) {
+        const idx = users.findIndex(u => u.id === editing.id);
+        users[idx] = editing;
+      } else {
+        if (users.find(u => u.username === editing.username)) { alert('Username already taken'); return prev; }
+        users.push({ ...editing, id: newId(), role: 'caregiver' });
+      }
+      return { ...prev, users };
+    });
+    setEditing(null);
+  };
+
+  const remove = (id) => {
+    if (!confirm('Remove caregiver and all their records?')) return;
+    setState(prev => ({
+      ...prev,
+      users: prev.users.filter(u => u.id !== id),
+      shifts: prev.shifts.filter(s => s.caregiverId !== id),
+      timeEntries: prev.timeEntries.filter(e => e.caregiverId !== id),
+    }));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold">Caregivers</h2>
+        <button onClick={() => setEditing({ id: null, name: '', username: '', password: '' })}
+          className="btn-primary rounded-lg px-3 py-1.5 text-sm font-medium">+ Add Caregiver</button>
+      </div>
+      <Card>
+        <div className="divide-y divide-gray-100">
+          {caregivers.map(c => (
+            <div key={c.id} className="py-3 flex justify-between items-center">
+              <div>
+                <div className="font-medium">{c.name}</div>
+                <div className="text-xs text-gray-500">@{c.username}</div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setEditing(c)} className="text-teal-700 hover:underline text-sm">Edit</button>
+                <button onClick={() => remove(c.id)} className="text-red-600 hover:underline text-sm">Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit Caregiver' : 'Add Caregiver'}
+        footer={<>
+          <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-sm rounded-lg border">Cancel</button>
+          <button onClick={save} className="px-3 py-1.5 text-sm rounded-lg btn-primary">Save</button>
+        </>}>
+        {editing && (
+          <div className="space-y-3">
+            <Field label="Full name">
+              <input value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+            </Field>
+            <Field label="Username">
+              <input value={editing.username} onChange={e => setEditing({...editing, username: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+            </Field>
+            <Field label="Password">
+              <input value={editing.password} onChange={e => setEditing({...editing, password: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+            </Field>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+};
+
+/* =========================
+   SUPERVISOR — REPORTS
+========================= */
+const Reports = ({ state }) => {
+  const today = new Date();
+  const defaultEnd = fmtDateISO(today);
+  const defaultStart = fmtDateISO(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 13));
+  const [start, setStart] = useState(defaultStart);
+  const [end, setEnd] = useState(defaultEnd);
+
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+  const entries = state.timeEntries.filter(e => e.date >= start && e.date <= end);
+
+  const rows = caregivers.map(c => {
+    const ce = entries.filter(e => e.caregiverId === c.id);
+    const dayMins = ce.filter(e => e.shiftType === 'day').reduce((s, e) => s + minsBetween(e.timeIn, e.timeOut, e.shiftType), 0);
+    const nightMins = ce.filter(e => e.shiftType === 'night').reduce((s, e) => s + minsBetween(e.timeIn, e.timeOut, e.shiftType), 0);
+    const total = dayMins + nightMins;
+    const overtimeMins = Math.max(0, total - 80 * 60); // assuming 80hr bi-weekly
+    const anomalies = ce.reduce((acc, e) => acc + analyzeEntry(e).filter(f => f.level !== 'info').length, 0);
+    return { c, count: ce.length, dayMins, nightMins, total, overtimeMins, anomalies };
+  });
+
+  const exportCSV = () => {
+    const header = ['Caregiver','Shifts','Day Hours','Night Hours','Total Hours','Overtime Hours','Anomalies'];
+    const lines = [header.join(',')];
+    rows.forEach(r => {
+      lines.push([
+        `"${r.c.name}"`, r.count, minsToHrs(r.dayMins), minsToHrs(r.nightMins),
+        minsToHrs(r.total), minsToHrs(r.overtimeMins), r.anomalies
+      ].join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `shiftcraft-payroll-${start}-to-${end}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card title="Payroll Period Report"
+        action={<div className="flex gap-2 no-print">
+          <button onClick={() => window.print()} className="px-3 py-1.5 text-sm rounded-lg border">Print</button>
+          <button onClick={exportCSV} className="px-3 py-1.5 text-sm rounded-lg btn-primary">Export CSV</button>
+        </div>}>
+        <div className="flex flex-wrap gap-3 items-end mb-4 no-print">
+          <Field label="From">
+            <input type="date" value={start} onChange={e => setStart(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5" />
+          </Field>
+          <Field label="To">
+            <input type="date" value={end} onChange={e => setEnd(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5" />
+          </Field>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-700">
+              <tr>
+                <th className="text-left px-3 py-2">Caregiver</th>
+                <th className="text-right px-3 py-2">Shifts</th>
+                <th className="text-right px-3 py-2">Day Hrs</th>
+                <th className="text-right px-3 py-2">Night Hrs</th>
+                <th className="text-right px-3 py-2">Total Hrs</th>
+                <th className="text-right px-3 py-2">Overtime</th>
+                <th className="text-right px-3 py-2">Anomalies</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.c.id} className="border-t border-gray-100">
+                  <td className="px-3 py-2 font-medium">{r.c.name}</td>
+                  <td className="px-3 py-2 text-right">{r.count}</td>
+                  <td className="px-3 py-2 text-right">{minsToHrs(r.dayMins)}</td>
+                  <td className="px-3 py-2 text-right">{minsToHrs(r.nightMins)}</td>
+                  <td className="px-3 py-2 text-right font-semibold">{minsToHrs(r.total)}</td>
+                  <td className={`px-3 py-2 text-right ${r.overtimeMins > 0 ? 'text-amber-700 font-semibold' : ''}`}>{minsToHrs(r.overtimeMins)}</td>
+                  <td className={`px-3 py-2 text-right ${r.anomalies > 0 ? 'text-red-600 font-semibold' : ''}`}>{r.anomalies}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-gray-300 font-semibold bg-gray-50">
+                <td className="px-3 py-2">TOTAL</td>
+                <td className="px-3 py-2 text-right">{rows.reduce((s, r) => s + r.count, 0)}</td>
+                <td className="px-3 py-2 text-right">{minsToHrs(rows.reduce((s, r) => s + r.dayMins, 0))}</td>
+                <td className="px-3 py-2 text-right">{minsToHrs(rows.reduce((s, r) => s + r.nightMins, 0))}</td>
+                <td className="px-3 py-2 text-right">{minsToHrs(rows.reduce((s, r) => s + r.total, 0))}</td>
+                <td className="px-3 py-2 text-right">{minsToHrs(rows.reduce((s, r) => s + r.overtimeMins, 0))}</td>
+                <td className="px-3 py-2 text-right">{rows.reduce((s, r) => s + r.anomalies, 0)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-500 mt-3">Overtime calculated as hours above 80 over the selected period (standard bi-weekly).</p>
+      </Card>
+    </div>
+  );
+};
+
+/* =========================
+   CUSTOMIZATION INTAKE — unified wizard for prospects + consultants
+========================= */
+const INTAKE_STEPS = [
+  { id: 'mode',         label: 'Mode' },
+  { id: 'profile',      label: 'Profile' },
+  { id: 'workforce',    label: 'Workforce' },
+  { id: 'leave',        label: 'Leave' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'branding',     label: 'Branding' },
+  { id: 'knowledge',    label: 'Content' },
+  { id: 'commercials',  label: 'Commercials' },
+  { id: 'review',       label: 'Review' },
+];
+
+const defaultIntake = () => ({
+  mode: 'prospect',
+  profile: { orgName: '', orgType: 'LTC home', province: 'ON', sites: 1, contactName: '', contactEmail: '', contactPhone: '', leadSource: '' },
+  workforce: { staffCount: 50, concurrent: 12, shiftPattern: 'day-night-12', customShifts: '', payPeriod: 'bi-weekly' },
+  leave: { annual: 15, sick: 10, personal: 5, carryover: '5 days carry over to next year', notice: 'Notify supervisor before shift start' },
+  integrations: { payroll: 'Ceridian', hris: 'None', sso: 'None', hardware: 'None' },
+  branding: { displayName: '', primaryColor: '#0F766E', logoNote: '' },
+  knowledge: { hr: '', company: '', firstAid: '' },
+  commercials: { tier: 'Standard', seatPrice: 4, setupFee: 4000, timeline: 'Within 60 days', notes: '' },
+});
+
+const STORAGE_INTAKE = 'bea_fisher_intake_draft';
+
+const CustomizationIntake = () => {
+  const [stepIdx, setStepIdx] = useState(0);
+  const [data, setData] = useState(() => {
+    try { const raw = localStorage.getItem(STORAGE_INTAKE); if (raw) return { ...defaultIntake(), ...JSON.parse(raw) }; } catch(e) {}
+    return defaultIntake();
+  });
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_INTAKE, JSON.stringify(data)); } catch(e) {}
+  }, [data]);
+
+  const step = INTAKE_STEPS[stepIdx];
+  const isConsultant = data.mode === 'consultant';
+  const visibleSteps = INTAKE_STEPS.filter(s => s.id !== 'commercials' || isConsultant);
+
+  const update = (section, field, value) => setData(d => ({ ...d, [section]: { ...d[section], [field]: value } }));
+  const setMode = (mode) => setData(d => ({ ...d, mode }));
+
+  const next = () => {
+    let i = stepIdx + 1;
+    while (i < INTAKE_STEPS.length && INTAKE_STEPS[i].id === 'commercials' && !isConsultant) i++;
+    if (i < INTAKE_STEPS.length) setStepIdx(i);
+  };
+  const back = () => {
+    let i = stepIdx - 1;
+    while (i >= 0 && INTAKE_STEPS[i].id === 'commercials' && !isConsultant) i--;
+    if (i >= 0) setStepIdx(i);
+  };
+
+  const reset = () => {
+    if (!confirm('Discard the current intake draft and start over?')) return;
+    setData(defaultIntake());
+    setStepIdx(0);
+    setSubmitted(false);
+  };
+
+  const annual = data.commercials.seatPrice * data.workforce.staffCount * 12;
+  const totalYr1 = annual + data.commercials.setupFee;
+
+  const recommendedTier = data.workforce.staffCount <= 25 ? 'Starter'
+    : data.workforce.staffCount <= 100 ? 'Standard' : 'Enterprise';
+
+  const exportText = () => {
+    const lines = [];
+    const sep = '\n' + '─'.repeat(60) + '\n';
+    lines.push('SHIFTCRAFT — ' + (isConsultant ? 'SOW DRAFT' : 'CUSTOMIZATION REQUEST'));
+    lines.push('Velorithm Systems Ltd  ·  ' + new Date().toLocaleDateString());
+    lines.push(sep);
+    lines.push('1. INSTITUTION PROFILE');
+    lines.push(`   Organization:   ${data.profile.orgName || '(unspecified)'}`);
+    lines.push(`   Type:           ${data.profile.orgType}`);
+    lines.push(`   Province:       ${data.profile.province}`);
+    lines.push(`   # of sites:     ${data.profile.sites}`);
+    lines.push(`   Contact:        ${data.profile.contactName} — ${data.profile.contactEmail} — ${data.profile.contactPhone}`);
+    if (isConsultant && data.profile.leadSource) lines.push(`   Lead source:    ${data.profile.leadSource}`);
+    lines.push(sep);
+    lines.push('2. WORKFORCE & SHIFTS');
+    lines.push(`   Frontline staff:    ${data.workforce.staffCount}`);
+    lines.push(`   Avg on shift:       ${data.workforce.concurrent}`);
+    lines.push(`   Shift pattern:      ${data.workforce.shiftPattern === 'day-night-12' ? 'Day 7AM–7PM + Night 7PM–7AM (12-hour)' : data.workforce.shiftPattern === 'day-eve-night-8' ? 'Day/Evening/Night (8-hour)' : 'Custom: ' + data.workforce.customShifts}`);
+    lines.push(`   Pay period:         ${data.workforce.payPeriod}`);
+    lines.push(sep);
+    lines.push('3. LEAVE POLICY');
+    lines.push(`   Annual:        ${data.leave.annual} days`);
+    lines.push(`   Sick:          ${data.leave.sick} days`);
+    lines.push(`   Personal:      ${data.leave.personal} days`);
+    lines.push(`   Carryover:     ${data.leave.carryover}`);
+    lines.push(`   Notice rules:  ${data.leave.notice}`);
+    lines.push(sep);
+    lines.push('4. INTEGRATIONS');
+    lines.push(`   Payroll:       ${data.integrations.payroll}`);
+    lines.push(`   HRIS:          ${data.integrations.hris}`);
+    lines.push(`   SSO:           ${data.integrations.sso}`);
+    lines.push(`   Time clock HW: ${data.integrations.hardware}`);
+    lines.push(sep);
+    lines.push('5. BRANDING');
+    lines.push(`   Display name:  ${data.branding.displayName || '(default: ShiftCraft)'}`);
+    lines.push(`   Primary color: ${data.branding.primaryColor}`);
+    lines.push(`   Logo note:     ${data.branding.logoNote || '(none provided)'}`);
+    lines.push(sep);
+    lines.push('6. CUSTOM CONTENT');
+    if (data.knowledge.hr) lines.push(`   HR additions:\n${data.knowledge.hr.split('\n').map(l => '     ' + l).join('\n')}`);
+    if (data.knowledge.company) lines.push(`   Company rules:\n${data.knowledge.company.split('\n').map(l => '     ' + l).join('\n')}`);
+    if (data.knowledge.firstAid) lines.push(`   First-aid additions:\n${data.knowledge.firstAid.split('\n').map(l => '     ' + l).join('\n')}`);
+    if (!data.knowledge.hr && !data.knowledge.company && !data.knowledge.firstAid) lines.push('   (none provided — defaults will apply)');
+    if (isConsultant) {
+      lines.push(sep);
+      lines.push('7. COMMERCIALS (DRAFT)');
+      lines.push(`   Recommended tier:    ${data.commercials.tier} (rules-based suggestion: ${recommendedTier})`);
+      lines.push(`   Price / seat / mo:   $${data.commercials.seatPrice.toFixed(2)} CAD`);
+      lines.push(`   Setup fee:           $${data.commercials.setupFee.toLocaleString()} CAD`);
+      lines.push(`   Year-1 ARR estimate: $${annual.toLocaleString()} CAD`);
+      lines.push(`   Year-1 total inc.    $${totalYr1.toLocaleString()} CAD`);
+      lines.push(`   Target go-live:      ${data.commercials.timeline}`);
+      if (data.commercials.notes) lines.push(`   Notes:               ${data.commercials.notes}`);
+    }
+    lines.push(sep);
+    lines.push('Generated by ShiftCraft Customization Intake.');
+    return lines.join('\n');
+  };
+
+  const downloadText = () => {
+    const txt = exportText();
+    const blob = new Blob([txt], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (data.profile.orgName || 'shiftcraft-intake').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    a.href = url; a.download = `${safeName}-${isConsultant ? 'sow-draft' : 'request'}.txt`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const copyText = async () => {
+    try {
+      await navigator.clipboard.writeText(exportText());
+      alert('Copied to clipboard.');
+    } catch (e) { alert('Copy failed — use Download instead.'); }
+  };
+
+  const handleSubmit = () => {
+    const subject = encodeURIComponent(`ShiftCraft request — ${data.profile.orgName || 'New prospect'}`);
+    const body = encodeURIComponent(exportText());
+    window.location.href = `mailto:hello@velorithmsystems.com?subject=${subject}&body=${body}`;
+    setSubmitted(true);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl bg-gradient-to-r from-teal-700 to-teal-600 text-white p-5">
+        <div className="text-sm opacity-90">Customization Intake</div>
+        <div className="text-xl font-bold">Tell us about your institution.</div>
+        <div className="text-sm text-teal-50 mt-1">Capture configuration in 9 short steps. Used by prospects (self-service) and by Velorithm consultants during scoping calls.</div>
+      </div>
+
+      {/* Stepper */}
+      <div className="flex items-center gap-1 overflow-x-auto pb-2">
+        {visibleSteps.map((s, i) => {
+          const realIdx = INTAKE_STEPS.findIndex(x => x.id === s.id);
+          const active = realIdx === stepIdx;
+          const done = realIdx < stepIdx;
+          return (
+            <button key={s.id} onClick={() => setStepIdx(realIdx)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs whitespace-nowrap border ${
+                active ? 'bg-teal-600 text-white border-teal-600' :
+                done ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                'bg-white text-gray-500 border-gray-200'
+              }`}>
+              <span className={`w-5 h-5 rounded-full grid place-items-center text-[10px] font-bold ${
+                active ? 'bg-white text-teal-700' : done ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>{i + 1}</span>
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <Card>
+        {step.id === 'mode' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Who's filling this out?</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <button onClick={() => setMode('prospect')}
+                className={`text-left border rounded-xl p-4 ${data.mode === 'prospect' ? 'border-teal-600 bg-teal-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="font-semibold text-gray-800 mb-1">I'm a prospect</div>
+                <div className="text-sm text-gray-600">I'm evaluating ShiftCraft for my institution. This intake produces a tailored summary I can send to Velorithm to start a conversation.</div>
+              </button>
+              <button onClick={() => setMode('consultant')}
+                className={`text-left border rounded-xl p-4 ${data.mode === 'consultant' ? 'border-teal-600 bg-teal-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="font-semibold text-gray-800 mb-1">I'm a Velorithm consultant</div>
+                <div className="text-sm text-gray-600">I'm scoping with a customer. This intake captures requirements and generates a Statement-of-Work draft with commercials.</div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step.id === 'profile' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Institution profile</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Organization name *">
+                <input value={data.profile.orgName} onChange={e => update('profile','orgName',e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="e.g. Bea Fisher Caregiving" />
+              </Field>
+              <Field label="Institution type *">
+                <select value={data.profile.orgType} onChange={e => update('profile','orgType',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['LTC home','Retirement community','Home care agency','Group / disability home','Community health centre','Hospital','Other'].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Province">
+                <select value={data.profile.province} onChange={e => update('profile','province',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['ON','BC','AB','QC','MB','SK','NS','NB','NL','PE','YT','NT','NU'].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </Field>
+              <Field label="Number of sites">
+                <input type="number" min="1" value={data.profile.sites} onChange={e => update('profile','sites',parseInt(e.target.value)||1)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Primary contact name *">
+                <input value={data.profile.contactName} onChange={e => update('profile','contactName',e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Contact email *">
+                <input type="email" value={data.profile.contactEmail} onChange={e => update('profile','contactEmail',e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Contact phone">
+                <input value={data.profile.contactPhone} onChange={e => update('profile','contactPhone',e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              {isConsultant && (
+                <Field label="Lead source / CRM ID">
+                  <input value={data.profile.leadSource} onChange={e => update('profile','leadSource',e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="e.g. OLTCA event 2026" />
+                </Field>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step.id === 'workforce' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Workforce &amp; shifts</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Frontline staff (total)">
+                <input type="number" min="1" value={data.workforce.staffCount} onChange={e => update('workforce','staffCount',parseInt(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Avg concurrent on shift">
+                <input type="number" min="1" value={data.workforce.concurrent} onChange={e => update('workforce','concurrent',parseInt(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Shift pattern">
+                <select value={data.workforce.shiftPattern} onChange={e => update('workforce','shiftPattern',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  <option value="day-night-12">Day 7AM–7PM + Night 7PM–7AM (12-hour)</option>
+                  <option value="day-eve-night-8">Day / Evening / Night (8-hour rotation)</option>
+                  <option value="custom">Custom (specify)</option>
+                </select>
+              </Field>
+              <Field label="Pay period">
+                <select value={data.workforce.payPeriod} onChange={e => update('workforce','payPeriod',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  <option>weekly</option><option>bi-weekly</option><option>semi-monthly</option><option>monthly</option>
+                </select>
+              </Field>
+              {data.workforce.shiftPattern === 'custom' && (
+                <div className="sm:col-span-2">
+                  <Field label="Custom shift definitions">
+                    <textarea rows="3" value={data.workforce.customShifts} onChange={e => update('workforce','customShifts',e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="e.g. AM 06:00-14:00; PM 14:00-22:00; Overnight 22:00-06:00" />
+                  </Field>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">ShiftCraft defaults to Day 7-7 / Night 7-7. Custom rotations are supported but add scoping time.</p>
+          </div>
+        )}
+
+        {step.id === 'leave' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Leave policy</h3>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Field label="Annual entitlement (days)"><input type="number" min="0" value={data.leave.annual} onChange={e => update('leave','annual',parseInt(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" /></Field>
+              <Field label="Sick entitlement (days)"><input type="number" min="0" value={data.leave.sick} onChange={e => update('leave','sick',parseInt(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" /></Field>
+              <Field label="Personal entitlement (days)"><input type="number" min="0" value={data.leave.personal} onChange={e => update('leave','personal',parseInt(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" /></Field>
+            </div>
+            <Field label="Carryover rule"><input value={data.leave.carryover} onChange={e => update('leave','carryover',e.target.value)} className="w-full border rounded-lg px-3 py-2" /></Field>
+            <Field label="Notification requirements"><textarea rows="2" value={data.leave.notice} onChange={e => update('leave','notice',e.target.value)} className="w-full border rounded-lg px-3 py-2" /></Field>
+          </div>
+        )}
+
+        {step.id === 'integrations' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Integrations</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Payroll vendor">
+                <select value={data.integrations.payroll} onChange={e => update('integrations','payroll',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['Ceridian / Dayforce','ADP Workforce Now','Payworks','QuickBooks Payroll','Wagepoint','Custom / Other','None'].map(o => <option key={o}>{o}</option>)}
+                </select>
+              </Field>
+              <Field label="HRIS">
+                <select value={data.integrations.hris} onChange={e => update('integrations','hris',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['None','BambooHR','Humi','Rippling','Workday','Other'].map(o => <option key={o}>{o}</option>)}
+                </select>
+              </Field>
+              <Field label="Single Sign-On">
+                <select value={data.integrations.sso} onChange={e => update('integrations','sso',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['None','Microsoft 365','Google Workspace','Okta','Custom SAML','OIDC provider'].map(o => <option key={o}>{o}</option>)}
+                </select>
+              </Field>
+              <Field label="Existing time clock hardware">
+                <select value={data.integrations.hardware} onChange={e => update('integrations','hardware',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['None','Kronos / UKG terminal','Biometric clock','Punch-card','Other'].map(o => <option key={o}>{o}</option>)}
+                </select>
+              </Field>
+            </div>
+            <p className="text-xs text-gray-500">CSV export to payroll works out of the box. Direct API integrations add 1-3 weeks of scoping per vendor.</p>
+          </div>
+        )}
+
+        {step.id === 'branding' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Branding</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Display name (header)"><input value={data.branding.displayName} onChange={e => update('branding','displayName',e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="e.g. Acme Care · Workspace" /></Field>
+              <Field label="Primary brand color">
+                <div className="flex gap-2 items-center">
+                  <input type="color" value={data.branding.primaryColor} onChange={e => update('branding','primaryColor',e.target.value)} className="h-10 w-14 border rounded" />
+                  <input value={data.branding.primaryColor} onChange={e => update('branding','primaryColor',e.target.value)} className="flex-1 border rounded-lg px-3 py-2 font-mono text-sm" />
+                </div>
+              </Field>
+            </div>
+            <Field label="Logo notes (delivery method, file)"><input value={data.branding.logoNote} onChange={e => update('branding','logoNote',e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="e.g. SVG to be emailed after sign-off" /></Field>
+          </div>
+        )}
+
+        {step.id === 'knowledge' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Custom content for the HR Assistant</h3>
+            <p className="text-sm text-gray-600">Paste any policies you want the in-app assistant to know about. Defaults are loaded if you leave these blank.</p>
+            <Field label="HR rule additions"><textarea rows="4" value={data.knowledge.hr} onChange={e => update('knowledge','hr',e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. Overtime is paid at 1.5x after 80 hrs / two weeks…" /></Field>
+            <Field label="Company rule additions"><textarea rows="4" value={data.knowledge.company} onChange={e => update('knowledge','company',e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></Field>
+            <Field label="First-aid additions (institution-specific)"><textarea rows="4" value={data.knowledge.firstAid} onChange={e => update('knowledge','firstAid',e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Resident-specific care notes belong here ONLY if appropriate to your privacy policy." /></Field>
+          </div>
+        )}
+
+        {step.id === 'commercials' && isConsultant && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Commercials (consultant only)</h3>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+              Rules-based recommendation for {data.workforce.staffCount} staff: <span className="font-semibold">{recommendedTier}</span> tier.
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Field label="Tier">
+                <select value={data.commercials.tier} onChange={e => update('commercials','tier',e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  {['Starter','Standard','Enterprise'].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="$/seat/mo (CAD)">
+                <input type="number" step="0.5" value={data.commercials.seatPrice} onChange={e => update('commercials','seatPrice',parseFloat(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+              <Field label="Setup fee (CAD)">
+                <input type="number" value={data.commercials.setupFee} onChange={e => update('commercials','setupFee',parseInt(e.target.value)||0)} className="w-full border rounded-lg px-3 py-2" />
+              </Field>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3 bg-gray-50 rounded-lg p-3">
+              <div><div className="text-xs text-gray-500">Annual ARR</div><div className="text-lg font-bold text-teal-700">${annual.toLocaleString()}</div></div>
+              <div><div className="text-xs text-gray-500">Year-1 total (inc. setup)</div><div className="text-lg font-bold text-teal-700">${totalYr1.toLocaleString()}</div></div>
+              <div><div className="text-xs text-gray-500">Per staff per year</div><div className="text-lg font-bold text-teal-700">${(data.commercials.seatPrice * 12).toFixed(0)}</div></div>
+            </div>
+            <Field label="Target go-live">
+              <input value={data.commercials.timeline} onChange={e => update('commercials','timeline',e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+            </Field>
+            <Field label="Special notes / commitments">
+              <textarea rows="3" value={data.commercials.notes} onChange={e => update('commercials','notes',e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            </Field>
+          </div>
+        )}
+
+        {step.id === 'review' && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Review {isConsultant ? '— SOW draft' : '— Your request'}</h3>
+            <div className="bg-gray-50 rounded-lg p-4 font-mono text-xs whitespace-pre-wrap text-gray-800 max-h-[400px] overflow-auto">{exportText()}</div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={copyText} className="px-3 py-2 text-sm rounded-lg border">Copy to clipboard</button>
+              <button onClick={downloadText} className="px-3 py-2 text-sm rounded-lg border">Download as .txt</button>
+              <button onClick={() => window.print()} className="px-3 py-2 text-sm rounded-lg border">Print / Save as PDF</button>
+              {!isConsultant && (
+                <button onClick={handleSubmit} className="px-3 py-2 text-sm rounded-lg btn-primary">Send to Velorithm</button>
+              )}
+              <button onClick={reset} className="ml-auto px-3 py-2 text-sm rounded-lg text-red-600 hover:underline">Reset intake</button>
+            </div>
+            {submitted && <div className="bg-green-50 border border-green-200 text-green-800 rounded-lg p-3 text-sm">Your request opened in your email client. We typically reply within one business day.</div>}
+          </div>
+        )}
+
+        {/* Nav */}
+        <div className="flex justify-between mt-6 pt-4 border-t">
+          <button onClick={back} disabled={stepIdx === 0}
+            className={`px-4 py-2 text-sm rounded-lg border ${stepIdx === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}>← Back</button>
+          {step.id !== 'review' ? (
+            <button onClick={next} className="px-4 py-2 text-sm rounded-lg btn-primary font-medium">Next →</button>
+          ) : <span />}
+        </div>
+      </Card>
+
+      <p className="text-xs text-gray-500">Draft auto-saves to your browser. Switch modes at the top to change between prospect and consultant flow.</p>
+    </div>
+  );
+};
+
+/* =========================
+   SUPERVISOR — SETTINGS / DATA
+========================= */
+const Settings = ({ state, setState }) => {
+  const counts = {
+    caregivers: state.users.filter(u => u.role === 'caregiver').length,
+    shifts: state.shifts.length,
+    entries: state.timeEntries.length,
+    pending: state.timeEntries.filter(e => e.status === 'pending').length,
+  };
+
+  const cleanSlate = () => {
+    if (!confirm('Clear ALL schedules and time logs?\n\nLogin accounts, leave balances, and policy/first-aid content are kept so you can sign in and use the assistants. This cannot be undone.')) return;
+    setState(prev => ({ ...prev, shifts: [], timeEntries: [] }));
+    alert('Done. Schedules and time logs are now empty — ready for clean testing.');
+  };
+
+  const restoreDemo = () => {
+    if (!confirm('Restore the full demo data set?\n\nThis replaces everything currently in the app with the original sample schedules and entries.')) return;
+    setState(seedData());
+    alert('Demo data restored.');
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card title="Current data">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Caregivers" value={counts.caregivers} tone="teal" />
+          <StatCard label="Scheduled Shifts" value={counts.shifts} tone="teal" />
+          <StatCard label="Time Entries" value={counts.entries} tone="green" />
+          <StatCard label="Pending Approval" value={counts.pending} tone="amber" />
+        </div>
+      </Card>
+
+      <Card title="Reset for testing">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gray-200 rounded-lg p-4">
+            <div>
+              <div className="font-medium text-gray-800">Clean slate</div>
+              <div className="text-sm text-gray-600 mt-0.5">
+                Empties every schedule and time entry so you can build and test the full workflow from scratch.
+                Keeps the {counts.caregivers + 1} login accounts, leave balances, and policy content.
+              </div>
+            </div>
+            <button onClick={cleanSlate}
+              className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg px-4 py-2.5">
+              Clear schedules &amp; logs
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gray-200 rounded-lg p-4">
+            <div>
+              <div className="font-medium text-gray-800">Restore demo data</div>
+              <div className="text-sm text-gray-600 mt-0.5">
+                Reloads the original sample week of shifts and example time entries — handy for presentations or demos.
+              </div>
+            </div>
+            <button onClick={restoreDemo}
+              className="whitespace-nowrap btn-primary font-medium rounded-lg px-4 py-2.5">
+              Restore demo data
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-4">
+          All data lives in your browser only (localStorage key <span className="font-mono">bea_fisher_attendance_v3</span>).
+          Clearing your browser data, or using a different browser, also resets the app.
+        </p>
+      </Card>
+
+      <Card title="Demo logins">
+        <div className="text-sm text-gray-700 space-y-1">
+          <div><span className="font-medium">Supervisor:</span> <span className="font-mono">admin / admin</span></div>
+          <div><span className="font-medium">Caregivers:</span> <span className="font-mono">jane / jane</span>, <span className="font-mono">mark / mark</span>, <span className="font-mono">aisha / aisha</span>, <span className="font-mono">liam / liam</span>, <span className="font-mono">sofia / sofia</span></div>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">A clean slate keeps all of these accounts — you can still sign in as any of them to test each role.</p>
+      </Card>
+    </div>
+  );
+};
+
+/* =========================
+   ASSISTANT — shared logic
+========================= */
+const CATEGORY_META = {
+  Leave:    { label: 'Leave',      tone: 'green' },
+  HR:       { label: 'HR Rules',   tone: 'teal' },
+  Company:  { label: 'Company',    tone: 'indigo' },
+  FirstAid: { label: 'First Aid',  tone: 'red' },
+};
+
+const tokenize = (s) => (s || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+const STOP = new Set(['the','a','an','is','are','do','i','my','me','what','how','can','to','of','for','and','on','in','about','with','tell','show','give','please','you','have','many','much','get','our','that','this']);
+
+// Score a KB article against query tokens
+const scoreArticle = (article, qTokens) => {
+  let score = 0;
+  const titleTokens = new Set(tokenize(article.title));
+  const tagTokens = new Set(article.tags.flatMap(tokenize));
+  const bodyTokens = new Set(tokenize(article.body));
+  qTokens.forEach(t => {
+    if (STOP.has(t)) return;
+    if (tagTokens.has(t)) score += 5;
+    if (titleTokens.has(t)) score += 3;
+    if (bodyTokens.has(t)) score += 1;
+  });
+  return score;
+};
+
+// Find which caregiver (if any) a query refers to — used by supervisors
+const matchCaregiver = (query, caregivers) => {
+  const q = query.toLowerCase();
+  return caregivers.find(c => {
+    const parts = c.name.toLowerCase().split(/\s+/);
+    return parts.some(p => p.length > 2 && q.includes(p)) || q.includes(c.username);
+  });
+};
+
+const LeaveBalanceCard = ({ name, balance }) => {
+  if (!balance) return <p className="text-sm text-gray-500">No leave record found for {name}.</p>;
+  const rows = [
+    { k: 'Annual', d: balance.annual, tone: 'teal' },
+    { k: 'Sick', d: balance.sick, tone: 'amber' },
+    { k: 'Personal', d: balance.personal, tone: 'indigo' },
+  ];
+  return (
+    <div>
+      <div className="text-sm font-medium text-gray-800 mb-2">Leave balance — {name}</div>
+      <div className="grid grid-cols-3 gap-2">
+        {rows.map(r => (
+          <div key={r.k} className="rounded-lg border border-gray-200 bg-white p-2 text-center">
+            <div className="text-xs text-gray-500">{r.k}</div>
+            <div className="text-xl font-bold text-teal-700">{r.d.remaining}</div>
+            <div className="text-[10px] text-gray-400">of {r.d.entitled} left · {r.d.used} used</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* =========================
+   HR & CARE ASSISTANT (chat)
+========================= */
+const HelpAssistant = ({ state, currentUser }) => {
+  const isSupervisor = currentUser.role === 'supervisor';
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+  const kb = state.knowledgeBase || [];
+
+  const greeting = {
+    role: 'bot',
+    text: isSupervisor
+      ? `Hi ${currentUser.name.split(' ')[0]} — ask me about HR rules, company policy, first-aid guidance, or a caregiver's leave balance (e.g. "leave balance for Mark").`
+      : `Hi ${currentUser.name.split(' ')[0]} — ask me about your leave balance, HR rules, company policy, or first-aid guidance for assisting people with disabilities.`,
+  };
+  const [messages, setMessages] = useState([greeting]);
+  const [input, setInput] = useState('');
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const answer = (query) => {
+    const qTokens = tokenize(query);
+    const wantsLeave = qTokens.some(t => ['leave','balance','vacation','holiday','sick','days','pto','annual','personal','off'].includes(t));
+
+    // Leave balance intent
+    if (wantsLeave) {
+      let target = currentUser;
+      if (isSupervisor) {
+        const matched = matchCaregiver(query, caregivers);
+        target = matched || null;
+      }
+      if (isSupervisor && !target) {
+        return { text: 'Whose leave balance would you like? Try "leave balance for Aisha".' };
+      }
+      const balance = (state.leaveBalances || {})[target.id];
+      return { card: <LeaveBalanceCard name={target.name} balance={balance} />, text: '' };
+    }
+
+    // Knowledge base intent — rank articles
+    const ranked = kb
+      .map(a => ({ a, s: scoreArticle(a, qTokens) }))
+      .filter(x => x.s > 0)
+      .sort((x, y) => y.s - x.s)
+      .slice(0, 2);
+
+    if (ranked.length === 0) {
+      return { text: "I couldn't find that. Try keywords like \"sick leave\", \"uniform\", \"confidentiality\", \"seizure\", or \"choking\". For anything urgent or medical, call emergency services." };
+    }
+    return { articles: ranked.map(r => r.a), text: '' };
+  };
+
+  const send = (text) => {
+    const q = (text ?? input).trim();
+    if (!q) return;
+    const reply = answer(q);
+    setMessages(m => [...m, { role: 'user', text: q }, { role: 'bot', ...reply }]);
+    setInput('');
+  };
+
+  const suggestions = isSupervisor
+    ? ['Leave balance for Mark', 'Overtime rules', 'Incident reporting', 'Seizure first aid']
+    : ['My leave balance', 'How much sick leave?', 'Choking first aid', 'Uniform policy'];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl bg-gradient-to-r from-teal-700 to-teal-600 text-white p-4">
+        <div className="font-semibold text-lg">HR &amp; Care Assistant</div>
+        <div className="text-sm text-teal-50">Leave balances · HR &amp; company rules · disability first-aid guidance</div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div ref={scrollRef} className="p-4 space-y-3 max-h-[420px] overflow-y-auto">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+                m.role === 'user' ? 'bg-teal-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+              }`}>
+                {m.text && <div className="whitespace-pre-wrap">{m.text}</div>}
+                {m.card && <div className="mt-1">{m.card}</div>}
+                {m.articles && (
+                  <div className="space-y-2 mt-1">
+                    {m.articles.map(a => (
+                      <div key={a.id} className="bg-white rounded-lg border border-gray-200 p-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge tone={CATEGORY_META[a.category].tone}>{CATEGORY_META[a.category].label}</Badge>
+                          <span className="font-semibold text-gray-800 text-sm">{a.title}</span>
+                        </div>
+                        <div className="text-gray-700 text-xs leading-relaxed">{a.body}</div>
+                      </div>
+                    ))}
+                    {m.articles.some(a => a.category === 'FirstAid') && (
+                      <div className="text-[11px] text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
+                        This is general guidance, not a substitute for trained first aid. In an emergency, call your local emergency number.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-gray-100 p-3">
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {suggestions.map(s => (
+              <button key={s} onClick={() => send(s)}
+                className="text-xs bg-teal-50 text-teal-700 border border-teal-100 rounded-full px-2.5 py-1 hover:bg-teal-100">{s}</button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') send(); }}
+              placeholder="Ask a question…"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+            <button onClick={() => send()} className="btn-primary rounded-lg px-4 py-2 text-sm font-medium">Send</button>
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500">Answers are drawn from Bea Fisher's policy library and sample leave data. Update the content in the app's seed data to match your institution.</p>
+    </div>
+  );
+};
+
+/* =========================
+   KNOWLEDGE SEARCH (agent)
+========================= */
+const KnowledgeSearch = ({ state, currentUser }) => {
+  const isSupervisor = currentUser.role === 'supervisor';
+  const kb = state.knowledgeBase || [];
+  const caregivers = state.users.filter(u => u.role === 'caregiver');
+  const directory = state.directory || {};
+
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all'); // all | HR | Company | FirstAid | Staff
+
+  const qTokens = tokenize(query);
+
+  // Policy/doc results
+  let docResults = kb.map(a => ({ a, s: query ? scoreArticle(a, qTokens) : 1 }))
+    .filter(x => x.s > 0)
+    .sort((x, y) => y.s - x.s)
+    .map(x => x.a);
+  if (filter !== 'all' && filter !== 'Staff') docResults = docResults.filter(a => a.category === filter);
+
+  // Staff directory results (supervisors only)
+  let staffResults = [];
+  if (isSupervisor) {
+    staffResults = caregivers.filter(c => {
+      if (!query) return true;
+      const d = directory[c.id] || {};
+      const hay = `${c.name} ${c.username} ${(d.certs||[]).join(' ')} ${d.team||''} ${d.email||''}`.toLowerCase();
+      return qTokens.some(t => !STOP.has(t) && hay.includes(t));
+    });
+  }
+
+  const showDocs = filter === 'all' || filter !== 'Staff';
+  const showStaff = isSupervisor && (filter === 'all' || filter === 'Staff');
+
+  const filters = [
+    { id: 'all', label: 'All' },
+    { id: 'HR', label: 'HR Rules' },
+    { id: 'Company', label: 'Company' },
+    { id: 'FirstAid', label: 'First Aid' },
+    ...(isSupervisor ? [{ id: 'Staff', label: 'Staff' }] : []),
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 text-white p-4">
+        <div className="font-semibold text-lg">Knowledge Search</div>
+        <div className="text-sm text-slate-200">Search policies, HR &amp; company rules, first-aid guides{isSupervisor ? ', and the staff directory' : ''}.</div>
+      </div>
+
+      <div className="flex gap-2">
+        <input value={query} onChange={e => setQuery(e.target.value)} autoFocus
+          placeholder="Search… e.g. 'confidentiality', 'seizure', 'CPR'"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        {query && <button onClick={() => setQuery('')} className="px-3 py-2 text-sm border rounded-lg text-gray-600">Clear</button>}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {filters.map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            className={`text-xs rounded-full px-3 py-1 border ${
+              filter === f.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}>{f.label}</button>
+        ))}
+      </div>
+
+      {showStaff && staffResults.length > 0 && (
+        <Card title="Staff directory">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {staffResults.map(c => {
+              const d = directory[c.id] || {};
+              return (
+                <div key={c.id} className="border border-gray-200 rounded-lg p-3">
+                  <div className="font-medium text-gray-800">{c.name}</div>
+                  <div className="text-xs text-gray-500 mb-1">{d.team} · {d.phone} · {d.email}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(d.certs || []).map(cert => <Badge key={cert} tone="teal">{cert}</Badge>)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {showDocs && (
+        <Card title={`Policies & guides${docResults.length ? ` (${docResults.length})` : ''}`}>
+          {docResults.length === 0 ? (
+            <p className="text-sm text-gray-500">No matching articles. Try another keyword.</p>
+          ) : (
+            <div className="space-y-3">
+              {docResults.map(a => (
+                <div key={a.id} className="border-l-4 border-teal-500 bg-gray-50 rounded-r-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge tone={CATEGORY_META[a.category].tone}>{CATEGORY_META[a.category].label}</Badge>
+                    <span className="font-semibold text-gray-800">{a.title}</span>
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed">{a.body}</p>
+                  {a.category === 'FirstAid' && (
+                    <p className="text-[11px] text-red-700 mt-1">General guidance only — in an emergency, call your local emergency number.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+};
+
+/* =========================
+   CAREGIVER VIEW
+========================= */
+const CaregiverHome = ({ state, setState, currentUser }) => {
+  const [tab, setTab] = useState('schedule');
+  const myShifts = state.shifts.filter(s => s.caregiverId === currentUser.id);
+  const myEntries = state.timeEntries.filter(e => e.caregiverId === currentUser.id);
+
+  const weekStart = getWeekStart(new Date());
+  const week = weekDates(weekStart);
+  const myWeekShifts = myShifts.filter(s => week.includes(s.date)).sort((a,b) => a.date.localeCompare(b.date));
+
+  const today = fmtDateISO(new Date());
+  const todaysShift = myShifts.find(s => s.date === today);
+
+  // --- Self clock-in / clock-out (system-generated timestamps) ---
+  const nowHHMM = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+  const todayEntries = myEntries.filter(e => e.date === today);
+  const openEntry = todayEntries.find(e => e.timeIn && !e.timeOut);
+  const completedToday = todayEntries.find(e => e.timeIn && e.timeOut);
+  const activeShiftType = todaysShift?.shiftType || 'day';
+
+  const clockIn = () => {
+    const ts = new Date().toISOString();
+    const t = nowHHMM();
+    setState(prev => ({
+      ...prev,
+      timeEntries: [...prev.timeEntries, {
+        id: newId(), caregiverId: currentUser.id, date: today,
+        timeIn: t, timeOut: '', shiftType: activeShiftType,
+        source: 'self', status: 'pending', notes: '',
+        auditLog: [{ ts, by: currentUser.username, action: `Self clock-in ${t}` }],
+      }],
+    }));
+  };
+
+  const clockOut = () => {
+    if (!openEntry) return;
+    const ts = new Date().toISOString();
+    const t = nowHHMM();
+    setState(prev => ({
+      ...prev,
+      timeEntries: prev.timeEntries.map(e => e.id === openEntry.id
+        ? { ...e, timeOut: t, status: 'pending', auditLog: [...(e.auditLog||[]), { ts, by: currentUser.username, action: `Self clock-out ${t}` }] }
+        : e),
+    }));
+  };
+
+  // Pay period (last 14 days for demo)
+  const ppEnd = new Date();
+  const ppStart = new Date(); ppStart.setDate(ppStart.getDate() - 13);
+  const ppEntries = myEntries.filter(e => e.date >= fmtDateISO(ppStart) && e.date <= fmtDateISO(ppEnd));
+  const totalMins = ppEntries.reduce((s, e) => s + minsBetween(e.timeIn, e.timeOut, e.shiftType), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 text-white p-5 shadow">
+        <div className="text-sm opacity-90">Welcome back,</div>
+        <div className="text-2xl font-bold">{currentUser.name}</div>
+        <div className="mt-3 text-sm">
+          {todaysShift
+            ? <>Today: <ShiftBadge type={todaysShift.shiftType} /></>
+            : <>You have no shift scheduled today.</>}
+        </div>
+      </div>
+
+      {/* Clock in / out */}
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-gray-800">Time clock</div>
+            {openEntry ? (
+              <div className="text-sm text-gray-600 mt-0.5">
+                Clocked in at <span className="font-mono font-medium text-teal-700">{openEntry.timeIn}</span> · <Badge tone="yellow">Pending approval</Badge>
+              </div>
+            ) : completedToday ? (
+              <div className="text-sm text-gray-600 mt-0.5">
+                Today: <span className="font-mono">{completedToday.timeIn}</span> → <span className="font-mono">{completedToday.timeOut}</span> ·{' '}
+                <Badge tone={completedToday.status === 'approved' ? 'green' : 'yellow'}>{completedToday.status === 'approved' ? 'Approved' : 'Pending approval'}</Badge>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 mt-0.5">You haven't clocked in today.</div>
+            )}
+          </div>
+          <div>
+            {openEntry ? (
+              <button onClick={clockOut}
+                className="w-full sm:w-auto bg-indigo-700 hover:bg-indigo-800 text-white font-medium rounded-lg px-5 py-2.5">
+                Clock Out
+              </button>
+            ) : completedToday ? (
+              <button disabled
+                className="w-full sm:w-auto bg-gray-100 text-gray-400 font-medium rounded-lg px-5 py-2.5 cursor-not-allowed">
+                Shift complete
+              </button>
+            ) : (
+              <button onClick={clockIn}
+                className="w-full sm:w-auto btn-primary font-medium rounded-lg px-5 py-2.5">
+                Clock In
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-3 border-t pt-2">
+          The time is recorded automatically from your device clock — you can't enter it by hand. Self clock-ins are marked
+          <span className="font-medium"> self-reported</span> and reviewed by your supervisor before they're approved for payroll.
+        </p>
+      </Card>
+
+      <div className="flex gap-1 border-b border-gray-200 text-sm overflow-x-auto">
+        {['schedule','records','summary','assistant','search'].map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-3 py-2 border-b-2 -mb-px font-medium whitespace-nowrap ${tab===t ? 'tab-active' : 'border-transparent text-gray-500'}`}>
+            {t === 'schedule' ? 'My Schedule' : t === 'records' ? 'Time Records' : t === 'summary' ? 'Hours Summary' : t === 'assistant' ? 'HR Assistant' : 'Search'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'schedule' && (
+        <Card title="This Week">
+          <ul className="divide-y divide-gray-100">
+            {week.map(d => {
+              const shift = myWeekShifts.find(s => s.date === d);
+              return (
+                <li key={d} className="py-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{weekday(d)}</div>
+                    <div className="text-xs text-gray-500">{niceDate(d)}</div>
+                  </div>
+                  {shift ? <ShiftBadge type={shift.shiftType} /> : <span className="text-sm text-gray-400">Off</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      {tab === 'records' && (
+        <Card title="My Time Records">
+          {myEntries.length === 0 ? <p className="text-sm text-gray-500">No records yet.</p> : (
+            <div className="overflow-x-auto -mx-5">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-700">
+                  <tr>
+                    <th className="text-left px-3 py-2">Date</th>
+                    <th className="text-left px-3 py-2">Shift</th>
+                    <th className="text-left px-3 py-2">Time In</th>
+                    <th className="text-left px-3 py-2">Time Out</th>
+                    <th className="text-right px-3 py-2">Hours</th>
+                    <th className="text-left px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...myEntries].sort((a,b) => b.date.localeCompare(a.date)).map(e => (
+                    <tr key={e.id} className="border-t border-gray-100">
+                      <td className="px-3 py-2">{niceDate(e.date)}</td>
+                      <td className="px-3 py-2"><ShiftBadge type={e.shiftType} /></td>
+                      <td className="px-3 py-2 font-mono">{e.timeIn || '—'}</td>
+                      <td className="px-3 py-2 font-mono">{e.timeOut || '—'}</td>
+                      <td className="px-3 py-2 text-right">{minsToHrs(minsBetween(e.timeIn, e.timeOut, e.shiftType))}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          <Badge tone={e.status === 'approved' ? 'green' : 'yellow'}>{e.status === 'approved' ? 'Approved' : 'Pending'}</Badge>
+                          {e.source === 'self' && <Badge tone="gray">Self</Badge>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {tab === 'summary' && (
+        <Card title={`Pay Period: ${niceDate(fmtDateISO(ppStart))} – ${niceDate(fmtDateISO(ppEnd))}`}>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard label="Shifts Worked" value={ppEntries.length} tone="teal" />
+            <StatCard label="Total Hours" value={minsToHrs(totalMins)} tone="green" />
+          </div>
+          <p className="text-xs text-gray-500 mt-3">If you see an error in your hours, contact your supervisor — all corrections are tracked via the audit log.</p>
+        </Card>
+      )}
+
+      {tab === 'assistant' && <HelpAssistant state={state} currentUser={currentUser} />}
+      {tab === 'search' && <KnowledgeSearch state={state} currentUser={currentUser} />}
+    </div>
+  );
+};
+
+/* =========================
+   APP SHELL
+========================= */
+const App = () => {
+  const [state, setState] = useState(loadState);
+  const [user, setUser] = useState(null);
+  const [tab, setTab] = useState('dashboard');
+
+  useEffect(() => { saveState(state); }, [state]);
+
+  if (!user) return <Login users={state.users} onLogin={setUser} />;
+
+  if (user.role === 'caregiver') {
+    return (
+      <div className="min-h-screen">
+        <Header user={user} onLogout={() => setUser(null)} />
+        <main className="max-w-3xl mx-auto p-4">
+          <CaregiverHome state={state} setState={setState} currentUser={user} />
+        </main>
+      </div>
+    );
+  }
+
+  const TABS = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'entries', label: 'Time Entries' },
+    { id: 'schedule', label: 'Schedule' },
+    { id: 'caregivers', label: 'Caregivers' },
+    { id: 'reports', label: 'Reports' },
+    { id: 'assistant', label: 'HR Assistant' },
+    { id: 'search', label: 'Search' },
+    { id: 'intake', label: 'Customization' },
+    { id: 'settings', label: 'Settings' },
+  ];
+
+  return (
+    <div className="min-h-screen">
+      <Header user={user} onLogout={() => setUser(null)} />
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-10 no-print">
+        <div className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`px-3 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px ${
+                tab === t.id ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}>{t.label}</button>
+          ))}
+        </div>
+      </nav>
+      <main className="max-w-6xl mx-auto p-4 sm:p-6">
+        {tab === 'dashboard' && <SupervisorDashboard state={state} />}
+        {tab === 'entries' && <TimeEntries state={state} setState={setState} currentUser={user} />}
+        {tab === 'schedule' && <Schedule state={state} setState={setState} />}
+        {tab === 'caregivers' && <Caregivers state={state} setState={setState} />}
+        {tab === 'reports' && <Reports state={state} />}
+        {tab === 'assistant' && <HelpAssistant state={state} currentUser={user} />}
+        {tab === 'search' && <KnowledgeSearch state={state} currentUser={user} />}
+        {tab === 'intake' && <CustomizationIntake />}
+        {tab === 'settings' && <Settings state={state} setState={setState} />}
+      </main>
+    </div>
+  );
+};
+
+const Header = ({ user, onLogout }) => (
+  <header className="bg-white border-b border-gray-200 no-print">
+    <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-teal-700 text-white grid place-items-center font-bold text-sm">SC</div>
+        <div>
+          <div className="font-semibold text-gray-800 leading-tight">ShiftCraft</div>
+          <div className="text-xs text-gray-500 leading-tight">Bea Fisher Caregiving · workspace</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="text-right hidden sm:block">
+          <div className="text-sm font-medium text-gray-800">{user.name}</div>
+          <div className="text-xs text-gray-500 capitalize">{user.role}</div>
+        </div>
+        <button onClick={onLogout} className="text-sm text-gray-600 hover:text-gray-900 border rounded-lg px-3 py-1.5">Sign out</button>
+      </div>
+    </div>
+  </header>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
