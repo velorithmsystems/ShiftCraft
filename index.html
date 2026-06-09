@@ -62,10 +62,27 @@
 <header class="border-b border-[--border]" style="border-color: var(--border);">
   <div class="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
     <a href="https://velogorithm.com" class="flex items-center gap-2.5">
-      <div class="w-8 h-8 rounded grid place-items-center" style="background: var(--gold); color: #1a1408; font-weight: 700;">V</div>
+      <!-- Velogorithm V-mark with mountain peak -->
+      <svg width="40" height="44" viewBox="0 0 400 360" aria-label="Velogorithm" role="img">
+        <defs>
+          <linearGradient id="vgGoldHdr" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%"  stop-color="#A06A1A"/>
+            <stop offset="40%" stop-color="#C8941E"/>
+            <stop offset="75%" stop-color="#E8B14A"/>
+            <stop offset="100%" stop-color="#F5CC74"/>
+          </linearGradient>
+          <linearGradient id="vgMtnShadowHdr" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="#6E4A12" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#6E4A12" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#vgGoldHdr)" d="M 60 90 L 135 90 L 200 250 L 265 90 L 340 90 L 200 340 Z"/>
+        <path fill="url(#vgGoldHdr)" d="M 240 90 L 280 10 L 305 60 L 322 30 L 348 90 Z"/>
+        <path fill="url(#vgMtnShadowHdr)" d="M 240 90 L 280 10 L 290 65 L 260 90 Z"/>
+      </svg>
       <div class="leading-tight">
-        <div class="font-semibold text-sm">Velogorithm</div>
-        <div class="text-[10px]" style="color: var(--muted);">Engineering Intelligence.</div>
+        <div class="font-semibold text-sm">Velo<span class="gold">gorithm</span></div>
+        <div class="text-[10px]" style="color: var(--muted);">Edmonton, Alberta · Engineering Intelligence</div>
       </div>
     </a>
     <nav class="hidden md:flex items-center gap-6 text-sm" style="color: var(--muted);">
@@ -102,8 +119,9 @@
         <div class="surface rounded-xl p-5">
           <div class="eyebrow mb-3">At a glance</div>
           <ul class="space-y-3 text-sm">
-            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Two-role app</div><div style="color: var(--muted);">Supervisor management + caregiver self-service</div></div></li>
+            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Two-role app</div><div style="color: var(--muted);">Supervisor management + employee self-service</div></div></li>
             <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">System-generated timestamps</div><div style="color: var(--muted);">Self clock-in/out — never typed</div></div></li>
+            <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Location verification</div><div style="color: var(--muted);">GPS-based on-site / off-site check at every punch</div></div></li>
             <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Full audit trail</div><div style="color: var(--muted);">Who changed what, when — on every entry</div></div></li>
             <li class="flex items-start gap-3"><span class="gold mt-0.5">✦</span><div><div class="font-medium">Built-in HR assistant</div><div style="color: var(--muted);">Leave balances, policy, first-aid guidance</div></div></li>
           </ul>
@@ -153,25 +171,30 @@
       <div class="surface rounded-xl p-6">
         <div class="gold text-2xl mb-3">02</div>
         <h3 class="font-semibold mb-2">Self Clock-In / Out</h3>
-        <p class="text-sm" style="color: var(--muted);">Caregivers clock themselves in and out from their own profile. Timestamps come from the system clock — never typed — and entries stay pending until a supervisor approves.</p>
+        <p class="text-sm" style="color: var(--muted);">Employees clock themselves in and out from their own profile. Timestamps come from the system clock — never typed. Device GPS is captured at the moment of each punch and compared to the configured worksite, so every entry is tagged <span class="gold">on-site, off-site (with distance), or no-GPS</span> before it reaches the supervisor for approval.</p>
       </div>
       <div class="surface rounded-xl p-6">
         <div class="gold text-2xl mb-3">03</div>
-        <h3 class="font-semibold mb-2">Supervisor Review</h3>
-        <p class="text-sm" style="color: var(--muted);">One-tap approval for pending self-entries. Edits are tracked. Every correction records who changed what and when.</p>
+        <h3 class="font-semibold mb-2">Location Verification</h3>
+        <p class="text-sm" style="color: var(--muted);">Three configurable tiers: <span class="gold">Verify-Lite</span> (browser GPS vs. worksite radius, ships today), <span class="gold">Verify-Standard</span> (adds Wi-Fi SSID allowlist), and <span class="gold">Verify-Strict</span> (adds daily-rotating QR / NFC at entrance). Mobile and home-care customers get per-visit micro-geofences against each client's address.</p>
       </div>
       <div class="surface rounded-xl p-6">
         <div class="gold text-2xl mb-3">04</div>
-        <h3 class="font-semibold mb-2">Smart Anomaly Flags</h3>
-        <p class="text-sm" style="color: var(--muted);">Late arrival, early departure, overtime, missing punches, shift gaps — surfaced automatically on the supervisor dashboard.</p>
+        <h3 class="font-semibold mb-2">Supervisor Review</h3>
+        <p class="text-sm" style="color: var(--muted);">One-tap approval for pending self-entries with verification badges visible next to every row. Edits are tracked. Every correction records who changed what and when, plus the captured coordinates.</p>
       </div>
       <div class="surface rounded-xl p-6">
         <div class="gold text-2xl mb-3">05</div>
-        <h3 class="font-semibold mb-2">Payroll Reports</h3>
-        <p class="text-sm" style="color: var(--muted);">Auto-calculated bi-weekly totals per caregiver, day vs night hours, overtime, anomaly counts. Print or export to CSV in one click.</p>
+        <h3 class="font-semibold mb-2">Smart Anomaly Flags</h3>
+        <p class="text-sm" style="color: var(--muted);">Late arrival, early departure, overtime, missing punches, shift gaps, off-site clock-ins — surfaced automatically on the supervisor dashboard.</p>
       </div>
       <div class="surface rounded-xl p-6">
         <div class="gold text-2xl mb-3">06</div>
+        <h3 class="font-semibold mb-2">Payroll Reports</h3>
+        <p class="text-sm" style="color: var(--muted);">Auto-calculated bi-weekly totals per employee, broken down by entry type (work, leave) and overtime category. OT and OFFSET classified deterministically. Print or export to CSV in one click.</p>
+      </div>
+      <div class="surface rounded-xl p-6">
+        <div class="gold text-2xl mb-3">07</div>
         <h3 class="font-semibold mb-2">HR &amp; Care Assistant</h3>
         <p class="text-sm" style="color: var(--muted);">In-app help that answers questions about leave balances, HR &amp; company rules, and first-aid guidance for assisting people with disabilities. Plus a knowledge search agent.</p>
       </div>
@@ -260,7 +283,7 @@
     <!--
       For Loom:    <div style="position:relative;padding-bottom:56.25%;"><iframe src="https://www.loom.com/embed/YOUR_ID" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></div>
       For YouTube: <div style="position:relative;padding-bottom:56.25%;"><iframe src="https://www.youtube.com/embed/YOUR_ID" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></div>
-      For MP4:     <video controls style="width:100%;border-radius:12px;"><source src="./shiftcraft-demo.mp4" type="video/mp4"></video>
+      For MP4:     <video controls style="width:100%;border-radius:12px;"><source src="./shiftflow-demo.mp4" type="video/mp4"></video>
     -->
     <div class="surface rounded-2xl overflow-hidden">
       <div class="aspect-video grid place-items-center text-center px-6" style="background: linear-gradient(135deg, #15130f, #1c1a16);">
@@ -271,7 +294,70 @@
           <div class="font-display text-2xl font-bold mb-2">Video coming soon</div>
           <p class="text-sm max-w-md mx-auto" style="color: var(--muted);">
             Drop your Loom, YouTube, or MP4 embed into this section. See the
-            <span class="gold">shiftcraft-demo-script.md</span> file for a ready-made 90-second walkthrough script.
+            <span class="gold">shiftflow-demo-script.md</span> file for a ready-made 90-second walkthrough script.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LOCATION VERIFICATION ============ -->
+<section class="section grid-bg">
+  <div class="max-w-6xl mx-auto px-5 py-20">
+    <div class="grid md:grid-cols-12 gap-10 items-start">
+      <div class="md:col-span-5">
+        <div class="eyebrow mb-3">05 — Location Verification</div>
+        <h2 class="font-display text-3xl sm:text-4xl font-bold leading-tight mb-5">
+          On-site, <span class="gold">verified</span>.
+        </h2>
+        <p class="text-base mb-4" style="color: var(--muted);">
+          How does the supervisor know the worker is actually at the work area when they tap Clock In?
+          ShiftFlow captures device GPS at the moment of the punch and compares it to a worksite geofence
+          set by the supervisor — every entry is tagged on-site, off-site (with distance), or no-GPS,
+          and the result is surfaced during approval and recorded in the audit log.
+        </p>
+        <p class="text-sm" style="color: var(--muted);">
+          Coordinates are stored on the entry only — never tracked continuously through the shift.
+          PIPEDA / PIPA notice and consent are captured during employee onboarding.
+        </p>
+      </div>
+      <div class="md:col-span-7">
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div class="surface rounded-xl p-5">
+            <div class="eyebrow mb-1">Tier 1 — ships today</div>
+            <div class="font-semibold text-base mb-2">Verify-Lite</div>
+            <p class="text-xs" style="color: var(--muted);">
+              Browser Geolocation API captures device GPS at clock-in/out;
+              haversine distance vs. configured worksite radius.
+              Off-site entries are <span class="gold">flagged for supervisor review</span>.
+            </p>
+          </div>
+          <div class="surface rounded-xl p-5">
+            <div class="eyebrow mb-1">Tier 2 — Q1 backend</div>
+            <div class="font-semibold text-base mb-2">Verify-Standard</div>
+            <p class="text-xs" style="color: var(--muted);">
+              Verify-Lite plus on-site Wi-Fi SSID / IP allowlist. Both signals must pass.
+              Failing entries can be flagged or <span class="gold">hard-blocked</span> per tenant setting.
+              For LTC, retirement, manufacturing, offices.
+            </p>
+          </div>
+          <div class="surface rounded-xl p-5">
+            <div class="eyebrow mb-1">Tier 3 — Q2 backend</div>
+            <div class="font-semibold text-base mb-2">Verify-Strict</div>
+            <p class="text-xs" style="color: var(--muted);">
+              Verify-Standard plus a daily-rotating QR at the entrance (or NFC tap).
+              Off-site or unverified clock-in is <span class="gold">hard-blocked</span>.
+              For regulated healthcare and unionized environments.
+            </p>
+          </div>
+        </div>
+        <div class="surface-2 rounded-xl p-5 mt-3">
+          <div class="eyebrow mb-2">Mobile and field-service customers</div>
+          <p class="text-sm" style="color: var(--muted);">
+            For home care, security patrols, cleaning crews, and field-service operators, the geofence is the client/visit address —
+            ShiftFlow stores per-visit coordinates and treats each visit as its own micro-geofence, so a home-care worker's clock-in
+            is verified against the client's home rather than the agency's office.
           </p>
         </div>
       </div>
@@ -284,7 +370,7 @@
   <div class="max-w-6xl mx-auto px-5 py-20">
     <div class="grid md:grid-cols-12 gap-12 items-start">
       <div class="md:col-span-5">
-        <div class="eyebrow mb-3">05 — Case Study</div>
+        <div class="eyebrow mb-3">06 — Case Study</div>
         <h2 class="font-display text-3xl sm:text-4xl font-bold leading-tight mb-5">
           Bea Fisher <span class="gold">Caregiving</span>.
         </h2>
@@ -354,8 +440,24 @@
     <div class="grid md:grid-cols-4 gap-8">
       <div class="md:col-span-2">
         <a href="https://velogorithm.com" class="flex items-center gap-2.5 mb-3">
-          <div class="w-8 h-8 rounded grid place-items-center" style="background: var(--gold); color: #1a1408; font-weight: 700;">V</div>
-          <div class="font-semibold text-sm">Velogorithm</div>
+          <svg width="40" height="44" viewBox="0 0 400 360" aria-label="Velogorithm" role="img">
+            <defs>
+              <linearGradient id="vgGoldSfFtr" x1="0%" y1="100%" x2="100%" y2="0%">
+                <stop offset="0%"  stop-color="#A06A1A"/>
+                <stop offset="40%" stop-color="#C8941E"/>
+                <stop offset="75%" stop-color="#E8B14A"/>
+                <stop offset="100%" stop-color="#F5CC74"/>
+              </linearGradient>
+              <linearGradient id="vgMtnSfFtr" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   stop-color="#6E4A12" stop-opacity="0.85"/>
+                <stop offset="100%" stop-color="#6E4A12" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path fill="url(#vgGoldSfFtr)" d="M 60 90 L 135 90 L 200 250 L 265 90 L 340 90 L 200 340 Z"/>
+            <path fill="url(#vgGoldSfFtr)" d="M 240 90 L 280 10 L 305 60 L 322 30 L 348 90 Z"/>
+            <path fill="url(#vgMtnSfFtr)" d="M 240 90 L 280 10 L 290 65 L 260 90 Z"/>
+          </svg>
+          <div class="font-semibold text-sm">Velo<span class="gold">gorithm</span></div>
         </a>
         <p class="text-sm max-w-md" style="color: var(--muted);">
           Global IT consulting and AI-native solutions, delivered at velocity. From strategy to system, engineered with rigor.
@@ -365,8 +467,8 @@
         <div class="text-xs font-semibold uppercase tracking-wider mb-3">Products</div>
         <ul class="space-y-2 text-sm" style="color: var(--muted);">
           <li><a href="https://velogorithm.com#products" class="hover:text-white">AI Agent Platform</a></li>
-          <li><a href="https://velogorithm.com#products" class="hover:text-white">ClipFlow</a></li>
-          <li><a href="./" class="hover:text-white gold">ShiftFlow</a></li>
+          <li><a href="https://velogorithm.com#products" class="hover:text-white">ClipCraft</a></li>
+          <li><a href="./shiftflow.html" class="hover:text-white gold">ShiftFlow</a></li>
         </ul>
       </div>
       <div>
