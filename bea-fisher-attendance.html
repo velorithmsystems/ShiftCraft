@@ -233,24 +233,46 @@ const haversineM = (a, b) => {
   return Math.round(2 * R * Math.asin(Math.sqrt(x)));
 };
 
+// Detect insecure context — browsers block geolocation on file:// and plain http:// (except localhost)
+const isInsecureContext = () => {
+  if (typeof window === 'undefined') return false;
+  if (window.isSecureContext === false) return true;
+  if (window.location?.protocol === 'file:') return true;
+  return false;
+};
+
 const captureLocation = () => new Promise(resolve => {
-  if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve(null);
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return resolve({ ok: false, reason: 'unsupported' });
+  }
+  if (isInsecureContext()) {
+    console.warn('[ShiftFlow] Geolocation blocked: insecure context (file:// or http://). Open via https:// or http://localhost.');
+    return resolve({ ok: false, reason: 'insecure-context' });
+  }
   let done = false;
   const finish = (v) => { if (!done) { done = true; resolve(v); } };
-  const timer = setTimeout(() => finish(null), 8000);
+  const timer = setTimeout(() => finish({ ok: false, reason: 'timeout' }), 10000);
   navigator.geolocation.getCurrentPosition(
     (pos) => { clearTimeout(timer); finish({
+      ok: true,
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: Math.round(pos.coords.accuracy || 0),
     });},
-    () => { clearTimeout(timer); finish(null); },
-    { enableHighAccuracy: true, timeout: 7000, maximumAge: 30000 }
+    (err) => {
+      clearTimeout(timer);
+      const reason = err.code === 1 ? 'denied' : err.code === 2 ? 'unavailable' : err.code === 3 ? 'timeout' : 'error';
+      console.warn(`[ShiftFlow] Geolocation failed: ${reason} (code ${err.code}) — ${err.message}`);
+      finish({ ok: false, reason });
+    },
+    { enableHighAccuracy: true, timeout: 9000, maximumAge: 30000 }
   );
 });
 
 const verifyLocation = (worksite, coords) => {
-  if (!coords) return { result: 'no-gps', distanceM: null };
+  if (!coords || !coords.ok) {
+    return { result: 'no-gps', reason: coords?.reason || 'unknown', distanceM: null };
+  }
   if (!worksite || worksite.lat == null || worksite.lng == null) {
     return { result: 'no-worksite', distanceM: null };
   }
@@ -263,15 +285,27 @@ const verifyLocation = (worksite, coords) => {
 
 const buildGeoStamp = async (worksite) => {
   const coords = await captureLocation();
-  const { result, distanceM } = verifyLocation(worksite, coords);
+  const { result, distanceM, reason } = verifyLocation(worksite, coords);
   return {
     capturedAt: new Date().toISOString(),
-    lat: coords?.lat ?? null,
-    lng: coords?.lng ?? null,
-    accuracy: coords?.accuracy ?? null,
+    lat: coords?.ok ? coords.lat : null,
+    lng: coords?.ok ? coords.lng : null,
+    accuracy: coords?.ok ? coords.accuracy : null,
     verifyResult: result,
     distanceM,
+    gpsReason: reason || null,
   };
+};
+
+const noGpsReasonLabel = (r) => {
+  switch (r) {
+    case 'insecure-context': return 'No GPS · open via localhost or HTTPS';
+    case 'denied':           return 'No GPS · permission denied';
+    case 'unavailable':      return 'No GPS · device unavailable';
+    case 'timeout':          return 'No GPS · timed out';
+    case 'unsupported':      return 'No GPS · browser unsupported';
+    default:                 return 'No GPS';
+  }
 };
 
 const verifySummary = (geo) => {
@@ -280,7 +314,7 @@ const verifySummary = (geo) => {
     case 'verified':    return { tone: 'green', text: geo.distanceM != null ? `On-site · ${geo.distanceM}m` : 'On-site' };
     case 'off-site':    return { tone: 'red',   text: geo.distanceM != null ? `Off-site · ${geo.distanceM}m away` : 'Off-site' };
     case 'no-worksite': return { tone: 'gray',  text: 'GPS captured · no worksite set' };
-    case 'no-gps':      return { tone: 'gray',  text: 'No GPS' };
+    case 'no-gps':      return { tone: 'gray',  text: noGpsReasonLabel(geo.gpsReason) };
     default:            return { tone: 'gray',  text: geo.verifyResult };
   }
 };
@@ -290,7 +324,7 @@ const auditFragment = (geo) => {
   if (geo.verifyResult === 'verified')    return ` · on-site${geo.distanceM != null ? ` (${geo.distanceM}m)` : ''}`;
   if (geo.verifyResult === 'off-site')    return ` · off-site${geo.distanceM != null ? ` (${geo.distanceM}m away)` : ''}`;
   if (geo.verifyResult === 'no-worksite') return ' · GPS captured (no worksite set)';
-  if (geo.verifyResult === 'no-gps')      return ' · no GPS';
+  if (geo.verifyResult === 'no-gps')      return ` · ${noGpsReasonLabel(geo.gpsReason).toLowerCase()}`;
   return '';
 };
 
@@ -1992,6 +2026,19 @@ const Settings = ({ state, setState }) => {
             Coordinates are stored on the time entry only and are never tracked continuously through the shift.
             Standard tier (Wi-Fi SSID allowlist) and Strict tier (rotating QR / NFC) ship with the production backend.
           </div>
+          {isInsecureContext() && (
+            <div className="rounded-lg bg-amber-50 border border-amber-300 p-3 text-xs text-amber-900 mt-2">
+              <div className="font-bold mb-1">⚠ GPS is blocked in this session — browsers don't allow geolocation on <code className="font-mono bg-amber-100 px-1 rounded">file://</code> or non-HTTPS URLs.</div>
+              <div className="mb-2">All clock-ins will be tagged <span className="font-semibold">"No GPS · open via localhost or HTTPS"</span> until you serve this app over HTTPS or <code className="font-mono bg-amber-100 px-1 rounded">http://localhost</code>.</div>
+              <div className="font-semibold mb-1">Quick fix for local testing:</div>
+              <ol className="list-decimal pl-5 space-y-0.5">
+                <li>Open a terminal in this folder.</li>
+                <li>Run <code className="font-mono bg-amber-100 px-1 rounded">python3 -m http.server 8000</code> (or <code className="font-mono bg-amber-100 px-1 rounded">npx serve</code>).</li>
+                <li>Open <code className="font-mono bg-amber-100 px-1 rounded">http://localhost:8000/bea-fisher-attendance.html</code>.</li>
+              </ol>
+              <div className="mt-2 italic">When hosted on velogorithm.com over HTTPS, GPS works automatically.</div>
+            </div>
+          )}
         </div>
       </Card>
 
