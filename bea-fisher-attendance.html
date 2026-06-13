@@ -2580,52 +2580,122 @@ const CaregiverHome = ({ state, setState, currentUser }) => {
         </p>
       </Card>
 
-      {/* My week */}
-      <Card title="This Week">
-        <ul className="divide-y divide-gray-100">
-          {week.map(d => {
-            const shift = myWeekShifts.find(s => s.date === d);
-            return (
-              <li key={d} className="py-3 flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{weekday(d)}</div>
-                  <div className="text-xs text-gray-500">{niceDate(d)}</div>
-                </div>
-                {shift ? <ShiftBadge type={shift.shiftType} shiftTypes={state.shiftTypes} /> : <span className="text-sm text-gray-400">Off</span>}
-              </li>
-            );
-          })}
-        </ul>
-      </Card>
+      {/* Tab navigation */}
+      <div className="flex gap-1 border-b border-gray-200 text-sm overflow-x-auto">
+        {[
+          { id: 'schedule',  label: 'My Schedule' },
+          { id: 'records',   label: 'Time Records' },
+          { id: 'summary',   label: 'Hours & Leave' },
+          { id: 'assistant', label: 'HR Assistant' },
+          { id: 'search',    label: 'Search' },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-3 py-2 border-b-2 -mb-px font-medium whitespace-nowrap ${tab===t.id ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Time records */}
-      <Card title="My Time Records">
-        {myEntries.length === 0
-          ? <div className="text-sm text-gray-500">No entries yet. When you clock in, your time record appears here.</div>
-          : <ul className="divide-y divide-gray-100 text-sm">
-              {myEntries.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20).map(e => (
-                <li key={e.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+      {/* My Schedule tab */}
+      {tab === 'schedule' && (
+        <Card title="This Week">
+          <ul className="divide-y divide-gray-100">
+            {week.map(d => {
+              const shift = myWeekShifts.find(s => s.date === d);
+              const isToday = d === today;
+              return (
+                <li key={d} className={`py-3 flex items-center justify-between ${isToday ? 'bg-teal-50 -mx-3 px-3 rounded' : ''}`}>
                   <div>
-                    <div className="font-medium">{niceDate(e.date)} · <ShiftBadge type={e.shiftType} shiftTypes={state.shiftTypes} /></div>
-                    <div className="text-xs text-gray-500 font-mono">{e.timeIn || '—'} → {e.timeOut || '—'}</div>
+                    <div className="font-medium">{weekday(d)} {isToday && <span className="text-xs text-teal-700 font-semibold ml-1">· Today</span>}</div>
+                    <div className="text-xs text-gray-500">{niceDate(d)}</div>
                   </div>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge tone={e.status === 'approved' ? 'green' : 'yellow'}>{e.status === 'approved' ? 'Approved' : 'Pending'}</Badge>
-                    {(() => { const v = verifySummary(e.geoIn);  return v ? <Badge tone={v.tone}>In: {v.text}</Badge>  : null; })()}
-                    {(() => { const v = verifySummary(e.geoOut); return v ? <Badge tone={v.tone}>Out: {v.text}</Badge> : null; })()}
-                  </div>
+                  {shift ? <ShiftBadge type={shift.shiftType} shiftTypes={state.shiftTypes} /> : <span className="text-sm text-gray-400">Off</span>}
                 </li>
-              ))}
-            </ul>}
-      </Card>
+              );
+            })}
+          </ul>
+          <p className="text-xs text-gray-500 mt-3 border-t pt-2">
+            Your supervisor builds the schedule and updates it as needed. If something looks wrong, message your supervisor right away.
+          </p>
+        </Card>
+      )}
 
-      <Card title="Pay-Period Summary (last 14 days)">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <StatCard label="Entries" value={ppEntries.length} tone="teal" />
-          <StatCard label="Hours" value={minsToHrs(totalMins)} tone="teal" />
-          <StatCard label="Approved" value={ppEntries.filter(e => e.status === 'approved').length} tone="green" />
+      {/* Time Records tab */}
+      {tab === 'records' && (
+        <Card title="My Time Records">
+          {myEntries.length === 0
+            ? <div className="text-sm text-gray-500">No entries yet. When you clock in, your time record appears here.</div>
+            : <ul className="divide-y divide-gray-100 text-sm">
+                {myEntries.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30).map(e => (
+                  <li key={e.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{niceDate(e.date)} · <ShiftBadge type={e.shiftType} shiftTypes={state.shiftTypes} /></div>
+                      <div className="text-xs text-gray-500 font-mono">{e.timeIn || '—'} → {e.timeOut || '—'}</div>
+                      {e.notes && <div className="text-xs text-gray-500 italic mt-0.5">{e.notes}</div>}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge tone={e.entryType === 'work' || !e.entryType ? 'teal' : getEntryType(e.entryType).tone}>
+                        {e.entryType === 'work' || !e.entryType ? 'Work' : getEntryType(e.entryType).short}
+                      </Badge>
+                      <Badge tone={e.status === 'approved' ? 'green' : 'yellow'}>{e.status === 'approved' ? 'Approved' : 'Pending'}</Badge>
+                      {(() => { const v = verifySummary(e.geoIn);  return v ? <Badge tone={v.tone}>In: {v.text}</Badge>  : null; })()}
+                      {(() => { const v = verifySummary(e.geoOut); return v ? <Badge tone={v.tone}>Out: {v.text}</Badge> : null; })()}
+                    </div>
+                  </li>
+                ))}
+              </ul>}
+        </Card>
+      )}
+
+      {/* Hours Summary + Leave Balances tab */}
+      {tab === 'summary' && (
+        <div className="space-y-4">
+          <Card title="Pay-Period Summary (last 14 days)">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <StatCard label="Entries" value={ppEntries.length} tone="teal" />
+              <StatCard label="Hours" value={minsToHrs(totalMins)} tone="teal" />
+              <StatCard label="Approved" value={ppEntries.filter(e => e.status === 'approved').length} tone="green" />
+            </div>
+          </Card>
+
+          <Card title="Leave Balances">
+            {(() => {
+              const lb = state.leaveBalances?.[currentUser.id];
+              if (!lb) return <div className="text-sm text-gray-500">No leave balance configured. Ask your supervisor.</div>;
+              return (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-lg border border-gray-200 p-3">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Annual</div>
+                      <div className="text-2xl font-bold text-teal-700 mt-1">{lb.annual.remaining} <span className="text-sm text-gray-500 font-normal">days left</span></div>
+                      <div className="text-xs text-gray-500 mt-1">{lb.annual.used} used of {lb.annual.entitled}</div>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 p-3">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sick</div>
+                      <div className="text-2xl font-bold text-amber-700 mt-1">{lb.sick.remaining} <span className="text-sm text-gray-500 font-normal">days left</span></div>
+                      <div className="text-xs text-gray-500 mt-1">{lb.sick.used} used of {lb.sick.entitled}</div>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 p-3">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Personal</div>
+                      <div className="text-2xl font-bold text-gray-700 mt-1">{lb.personal.remaining} <span className="text-sm text-gray-500 font-normal">days left</span></div>
+                      <div className="text-xs text-gray-500 mt-1">{lb.personal.used} used of {lb.personal.entitled}</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+                    <span className="font-semibold">To request leave:</span> message your supervisor directly. They'll log it in the system and it'll appear in your Time Records once approved.
+                  </div>
+                </>
+              );
+            })()}
+          </Card>
         </div>
-      </Card>
+      )}
+
+      {/* HR Assistant tab */}
+      {tab === 'assistant' && <HelpAssistant state={state} currentUser={currentUser} />}
+
+      {/* Search tab */}
+      {tab === 'search' && <KnowledgeSearch state={state} currentUser={currentUser} />}
     </div>
   );
 };
